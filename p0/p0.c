@@ -4,7 +4,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
-#define MAX 256
+#include "list.h"
+#define MAX 1024
 
 
 
@@ -69,13 +70,17 @@ void EliminarDeFicherosAbiertos(int fd){
     }
 }
 
+char *NombreFicheroDescriptor(int fd){
+    return openFiles[fd-1].nombre;
+}
+
 void Cmd_authors(char *tr[]){
     if (tr[1] == NULL){
-        printf("Ivan Afonso Cerdeira: ivan.afonso@udc.es,\n");
+        printf("Ivan Afonso Cerdeira: ivan.afonso@udc.es, Minerva Antia Lago Lopez: minerva.lago.lopez@udc.es\n");
     }else if (strcmp(tr[1], "-l") == 0){
-        printf("ivan.afonso@udc.es,\n");
+        printf("ivan.afonso@udc.es, minerva.lago.lopez\n");
     }else if(strcmp(tr[1], "-n") == 0){
-        printf("Ivan Afonso Cerdeira,\n");
+        printf("Ivan Afonso Cerdeira, Minerva Antia \n");
     }else{
         printf("Error: Invalid option\n");
     }
@@ -98,6 +103,20 @@ void Cmd_ppid(char *tr[]){
 }
 
 void Cmd_cd(char *tr[]){
+    char path[MAX]
+    if(tr[1] == NULL){
+        if(getcwd(path,MAX)==NULL){
+            perror("getcwd");
+        }else {
+            printf("Directorio actual %s\n", path);
+        }
+    }
+
+    else if(tr[2] == NULL){
+        if (chdir(tr[1])== -1){
+            printf("No se ")
+        }
+    }
 
 }
 
