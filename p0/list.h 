@@ -1,0 +1,30 @@
+#ifndef LIST_H
+#define LIST_H
+
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+#include <string.h>
+
+#define LNULL NULL
+
+typedef char *tItemL;
+
+typedef struct tNode *tPos;
+
+struct tNode{
+    tItemL item;
+    tPos next;
+};
+
+typedef tPos tListP:
+
+void createEmptyList(tListP *L);
+bool createNode(tPos *p);
+bool insertElement(tItemL d, tListP *L);
+tItemL getItemP(tPos, tListP L);
+tPos first(tListP L);
+tPos last(tListP L);
+tPos nextP(tPos p, tListP L);
+void RemoveElement(tPos p, tListP *L);
+void deleteList(tListP *L);
