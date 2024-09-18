@@ -1,16 +1,21 @@
 #include "list.h"
 
 
-void createEmptyList(tList *L){
-    *L=LNULL;
-}
-bool createNode(tPosL *p){
-    *p= malloc(sizeof(**p));
-    return (*p!=LNULL);
+bool isEmptyList(tListP L){
+    return L==LNULL;
 }
 
-bool insertItem(tItemL d,tPosL p, tList *L){
-    tPosL q,aux;
+void createEmptyList(tListP *L){
+    *L=LNULL;
+}
+
+bool createNode(tPos *p){
+    *p = malloc(sizeof(struct tNode));
+    return (*p) !=LNULL;
+}
+
+bool insertItem(tItemL d,tPos p, tListP *L){
+    tPos q,aux;
     if(!createNode(&q)){
         return false;
     }
@@ -43,17 +48,17 @@ bool insertItem(tItemL d,tPosL p, tList *L){
 tItemL getItemP(tPos p, tListP L){
     return p->data;
 }
-tPosL first(tList L){
+tPos first(tListP L){
     return L;
 }
 
-tPosL last(tList L){
-    tPosL i;
+tPos last(tListP L){
+    tPos i;
     for(i=L;i->next!=LNULL;i=i->next);
     return i;
 }
 
-tPosL next(tPosL p, tList L){
+tPos next(tPos p, tListP L){
     return p->next;
 }
 void RemoveElement(tPos p, tListP *L){

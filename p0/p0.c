@@ -232,8 +232,11 @@ void leerEntrada(){
 }
 
 void procesarEntrada(){
-     
+ if (tr[0]=="authors "){
+    Cmd_authors(tr
+ }    
 }
+
 
 
 
