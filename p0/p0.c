@@ -4,6 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdbool.h>
+#include <time.h>
+#include <sys/utsname.h>
 #include "list.h"
 #define MAX 1024
 #define MAXNAME 1024
@@ -12,7 +15,7 @@
 
 
 int TrocearCadena(char * cadena, char * tr[]);
-void procesarEntrada(char * tr[]);
+void procesarEntrada(bool *terminado, char *tr[], tListP *L);
 
 
 typedef struct{
@@ -121,6 +124,7 @@ void Cmd_cd(char *tr[]){
     else{
         printf("Error: Invalid option\n");
 
+   }
 }
 
 void Cmd_date(char *tr[]){
@@ -174,13 +178,12 @@ void Cmd_close (char *tr[]){
     }
 }  
 
-void Cmd_dup (char * tr[]) 
-{                     
+void Cmd_dup (char * tr[]){                     
     int df, duplicado;                        
     char aux[MAXNAME],*p;
                                       
     if (tr[0]==NULL || (df=atoi(tr[0]))<0) { /*no hay parametro*/
-        ListOpenFiles(-1);                 /*o el descriptor es menor que 0*/ 
+        ListFicherosAbiertos(-1);                 /*o el descriptor es menor que 0*/ 
     }
 
     duplicado=dup(df);
@@ -190,6 +193,7 @@ void Cmd_dup (char * tr[])
 }
 
 void Cmd_infosys(char *tr[]){
+    struct utsname utsname;
     if (tr[1] == NULL){
         printf("Nombre del sistema: %s\n", utsname.sysname);
         printf("Nombre del nodo: %s\n", utsname.nodename);
@@ -249,9 +253,9 @@ void Cmd_help(char *tr[]){
   }
 }
 
-void Cmd_quit(char *tr[]){
+void Cmd_quit(bool *terminado, char *tr[], tListP *L){
     if(tr[1] == NULL){
-        terminado = true;
+        *terminado = true;
         deleteList(L);
     }else{
         printf("Error: Invalid option\n");
@@ -270,7 +274,7 @@ void leerEntrada(){
 
 }
 
-void procesarEntrada(){
+void procesarEntrada(bool *terminado, char *tr[], tListP *L){
    if(tr[0] != NULL){
      if(strcmp(tr[0], "authors") == 0){
        Cmd_authors(tr);
@@ -294,14 +298,14 @@ void procesarEntrada(){
             Cmd_infosys(tr);
      }else if(strcmp(tr[0], "help") == 0){
             Cmd_help(tr);
-     }else if(strcmp(tr[0], "quit") == 0){                                     
+     }else if(strcmp(tr[0], "quit") == 0){  
+             Cmd_quit(terminado,tr, L);                                   
    }  
+ }
 }
 
 
-
-
-int main{
+int main(){
    char *tr[MAX];
    bool terminado = false;
    tListP L;
@@ -309,7 +313,7 @@ int main{
    while (!terminado){
        imprimirPrompt();
        leerEntrada(tr);
-       procesarEntrada();
+       procesarEntrada(&terminado, tr, &L);
     }
     
 }
