@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "list.h"
 #define MAX 1024
+#define MAXNAME 1024
 
 
 
@@ -71,7 +72,7 @@ void EliminarDeFicherosAbiertos(int fd){
 }
 
 char *NombreFicheroDescriptor(int fd){
-    return openFiles[fd-1].nombre;
+    return openFiles[fd-1].name;
 }
 
 void Cmd_authors(char *tr[]){
@@ -103,16 +104,14 @@ void Cmd_ppid(char *tr[]){
 }
 
 void Cmd_cd(char *tr[]){
-    char path[MAX]
+    char path[MAX];
     if(tr[1] == NULL){
         if(getcwd(path,MAX)==NULL){
             perror("getcwd");
         }else {
             printf("Directorio actual %s\n", path);
         }
-    }
-
-    else if(tr[2] == NULL){
+    }else if(tr[2] == NULL){
         if (chdir(tr[1])== -1){
             printf("No se ha podido cambiar de directorio\n");
 
@@ -163,13 +162,13 @@ void Cmd_open (char * tr[]){
 void Cmd_close (char *tr[]){                                                      
     int df;                                         
                                                    
-    if (tr[0]==NULL || (df=atoi(tr[0]))<0) { /*no hay parametro*/
-        ListFicherosAbiertos;/*o el descriptor es menor que 0*/                              
+    if (tr[1]==NULL || (df=atoi(tr[1]))<0) { /*no hay parametro*/
+        ListFicherosAbiertos(); /*o el descriptor es menor que 0*/                              
         return;  
     }                     
                                            
-    if (pclose(df)==-1) {  
-        perror("Inposible cerrar descriptor");
+    if (close(df)==-1) {  
+        perror("Imposible cerrar descriptor");
     }else{                                                         
         EliminarDeFicherosAbiertos(df);
     }
@@ -303,11 +302,13 @@ void procesarEntrada(){
 
 
 int main{
-
-
+   char *tr[MAX];
+   bool terminado = false;
+   tListP L;
+   createEmptyList(&L);
    while (!terminado){
        imprimirPrompt();
-       leerEntrada();
+       leerEntrada(tr);
        procesarEntrada();
     }
     
