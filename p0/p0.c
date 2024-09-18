@@ -128,7 +128,41 @@ void Cmd_cd(char *tr[]){
 }
 
 void Cmd_date(char *tr[]){
-    
+  	time_t current_time;
+    struct tm *local_time;
+    time(&current_time);
+    local_time = localtime(&current_time);
+    if (tr[0]==NULL) {
+            ListFicherosAbiertos;
+        return;
+    }
+    if (strcmp (tr[1], "date")==0){
+      if (tr[2] == NULL){
+		printf("%02d/%02d/%02d\n",
+           local_time->tm_year+1900,
+           local_time->tm_mon+1,
+           local_time->tm_mday);
+           printf("%02d/%02d/%02d\n",
+           local_time->tm_hour,
+           local_time->tm_min,
+           local_time->tm_sec);
+      }
+      if (strcmp(tr[2], "-d") == 0){
+		printf("%02d/%02d/%02d\n",
+           local_time->tm_year+1900,
+           local_time->tm_mon+1,
+           local_time->tm_mday);
+      }
+      if (strcmp (tr[2], "-t")==0){
+		printf("%02d/%02d/%02d\n",
+           local_time->tm_hour,
+           local_time->tm_min,
+           local_time->tm_sec);
+      }
+    }
+    else{
+      printf("Error: Invalid option\n");
+    }
 }
 
 void Cmd_hist(char *tr[]){
