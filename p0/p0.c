@@ -114,13 +114,19 @@ void Cmd_cd(char *tr[]){
 
     else if(tr[2] == NULL){
         if (chdir(tr[1])== -1){
-            printf("No se ")
+            printf("No se ha podido cambiar de directorio\n");
+
         }
+
     }
+    else{
+        printf("Error: Invalid option\n");
 
 }
 
-void Cmd_date(char *tr[]){}
+void Cmd_date(char *tr[]){
+    
+}
 
 void Cmd_hist(char *tr[]){
 
