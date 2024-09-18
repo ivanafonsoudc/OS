@@ -206,7 +206,47 @@ void Cmd_help(char *tr[]){
   if(tr[1] == LNULL){
     printf("Comandos disponibles: authors, pid, ppid, cd, date, historic, open, close, dup, infosys, help, quit,exit,bye\n");
     if(strcmp(tr[1],"authors") == 0){
-      printf("Prints \n");
+      printf("Prints the names and logins of the program authors. authors -l prints only the logins and authors -n prints only the names\n");
+    }
+    if(strcmp(tr[1], "pid") == 0){
+      printf("Prints the pid of the process executing the shell\n");
+  	}
+    if(strcmp(tr[1], "ppid") == 0){
+      printf("Prints the pid of the shell’s parent process\n");
+    }
+    if(strcmp(tr[1], "cd") == 0){
+      printf("Changes the current working directory of the shell to dir (using the chdir system call). When invoked without auguments it prints the current working directory (using the getcwd system call)\n");
+    }
+    if(strcmp(tr[1], "date") == 0){
+      printf("Prints the current date in the format DD/MM/YYYY and the current time in the format hh:mm:ss.\n date -d Prints the current date in the format DD/MM/YYYY\n date -t Prints and the current time in the format hh:mm:ss.\n");
+    }
+    if(strcmp(tr[1], "historic") == 0){
+      printf("Shows the historic of commands executed by this shell. In order to do this, a list to store all the commands input to the shell must be implemented.\n – historic Prints all the comands that have been input with their order number\n – historic N Repeats command number N (from historic list)\n – historic -N Prints only the lastN comands\n");
+    }
+    if(strcmp(tr[1], "open") == 0){
+      printf("Opens a file and adds it (together with the file descriptor and the opening mode to the list of shell open files.\n For the mode we’ll use cr for O_CREAT, ap for O_APPEND, ex for O_EXCL, ro for O_RDONLY, rw for O_RDWR, wo for O_WRONLY and tr for O_TRUNC\n");
+    }
+    if(strcmp(tr[1], "close") == 0){
+      printf("Closes the df file descriptor and eliminates the corresponding item from the list\n");
+    }
+    if(strcmp(tr[1], "dup") == 0){
+      printf("Duplicates of the df file descriptor\n");
+    }
+    if(strcmp(tr[1], "infosys") == 0){
+      printf("Prints information on the machine running the shell\n");
+    }
+    if(strcmp(tr[1], "help") == 0){
+      printf("help displays a list of available commands. help cmd gives a brief help on the usage of comand cmd\n");
+    }
+    if(strcmp(tr[1], "quit") == 0){
+      printf("Ends the shell\n");
+    }
+    if(strcmp(tr[1], "exit") == 0){
+      printf("Ends the shell\n");
+    }
+    if(strcmp(tr[1], "bye") == 0){
+      printf("Ends the shell\n");
+    }
   }
 }
 
