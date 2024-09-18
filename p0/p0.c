@@ -232,9 +232,31 @@ void leerEntrada(){
 }
 
 void procesarEntrada(){
- if (tr[0]=="authors "){
-    Cmd_authors(tr
- }    
+   if(tr[0] != NULL){
+     if(strcmp(tr[0], "authors") == 0){
+       Cmd_authors(tr);
+     }else if(strcmp(tr[0], "pid") == 0){
+         Cmd_pid(tr);
+     }else if(strcmp(tr[0], "ppid") == 0){
+         Cmd_ppid(tr); 
+     }else if(strcmp(tr[0], "cd") == 0){
+         Cmd_cd(tr);
+     }else if(strcmp(tr[0], "date") == 0){
+         Cmd_date(tr);
+     }else if(strcmp(tr[0], "hist") == 0){
+         Cmd_hist(tr);
+     }else if(strcmp(tr[0], "open") == 0){
+         Cmd_open(tr);
+     }else if(strcmp(tr[0], "close") == 0){
+         Cmd_close(tr);
+     }else if(strcmp(tr[0], "dup") == 0){
+            Cmd_dup(tr);
+     }else if(strcmp(tr[0], "infosys") == 0){
+            Cmd_infosys(tr);
+     }else if(strcmp(tr[0], "help") == 0){
+            Cmd_help(tr);
+     }else if(strcmp(tr[0], "quit") == 0){                                     
+   }  
 }
 
 
