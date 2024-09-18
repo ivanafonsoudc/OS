@@ -190,6 +190,35 @@ void Cmd_dup (char * tr[])
        AnadirFicherosAbiertos(duplicado,aux,fcntl(duplicado,F_GETFL));
 }
 
+void Cmd_infosys(char *tr[]){
+    if (tr[1] == NULL){
+        printf("Nombre del sistema: %s\n", utsname.sysname);
+        printf("Nombre del nodo: %s\n", utsname.nodename);
+        printf("Nombre de la version: %s\n", utsname.release);
+        printf("Nombre de la version: %s\n", utsname.version);
+        printf("Nombre de la version: %s\n", utsname.machine);
+    }else{
+        printf("Error: Invalid option\n");
+    }
+}
+
+void Cmd_help(char *tr[]){
+  if(tr[1] == LNULL){
+    printf("Comandos disponibles: authors, pid, ppid, cd, date, historic, open, close, dup, infosys, help, quit,exit,bye\n");
+    if(strcmp(tr[1],"authors") == 0){
+      printf("Prints \n");
+  }
+}
+
+void Cmd_quit(char *tr[]){
+    if(tr[1] == NULL){
+        terminado = true;
+        deleteList(L);
+    }else{
+        printf("Error: Invalid option\n");
+    }
+}
+
 void imprimirPrompt(){
     printf(":~>");
 }
@@ -208,7 +237,9 @@ void procesarEntrada(){
 
 
 
-main{
+int main{
+
+
    while (!terminado){
        imprimirPrompt();
        leerEntrada();
