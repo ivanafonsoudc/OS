@@ -208,17 +208,38 @@ void Cmd_open (char * tr[]){
     }
 }     
 
-void Cmd_close (char *tr[]){                                                      
-    int df;                                         
-                                                   
+/*
+void Cmd_open (char *tr[]){
+int i,df, mode=0;
+	if(tr[1]==NULL){
+		ListFicherosAbiertos();
+		return;
+	}
+	for(i=1; tr[i]!=NULL;i++){
+		if (!strcmp(tr[i],"cr")) mode|=O_CREAT;
+		else if (!strcmp(tr[i],"ex")) mode|=O_EXCL;
+		else if (!strcmp(tr[i],"ro")) mode|=O_RDONLY;
+		else if (!strcmp(tr[i],"wo")) mode|=O_WRONLY;
+		else if (!strcmp(tr[i],"rw")) mode|=O_RDWR;
+		else if (!strcmp(tr[i],"ap")) mode|=O_APPEND;
+		else if (!strcmp(tr[i],"tr")) mode|=O_TRUNC;
+		else break;
+	}
+	else{
+		perror("Imposible abrir fichero");
+	}
+}*/
+void Cmd_close (char *tr[]){
+    int df;
+
     if (tr[1]==NULL || (df=atoi(tr[1]))<0) { /*no hay parametro*/
-        ListFicherosAbiertos(); /*o el descriptor es menor que 0*/                              
-        return;  
-    }                     
-                                           
-    if (close(df)==-1) {  
+        ListFicherosAbiertos(); /*o el descriptor es menor que 0*/
+        return;
+    }
+
+    if (close(df)==-1) {
         perror("Imposible cerrar descriptor");
-    }else{                                                         
+    }else{
         EliminarDeFicherosAbiertos(df);
     }
 }
