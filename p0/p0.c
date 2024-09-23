@@ -16,6 +16,7 @@
 int TrocearCadena(char *cadena, char *tr[]);
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *L, int *openFilesCount);
 
+int history_count = 0;
 
 
 typedef struct{
@@ -38,6 +39,12 @@ int TrocearCadena(char * cadena, char * tr[]){
     }
     return i;
     
+}
+
+void addHistory(char *cmd, char *tr[], tListP *L){
+    if(tr[0] != NULL){
+    insertItem(cmd, 0, L);
+    }
 }
 
 void Mode(int mode){
@@ -187,8 +194,31 @@ void Cmd_hist(char *tr[], char *cmd, tListP L){
             printf("nº%d command:%s\n", count, getItemP(i,L));
             count++;
         }
-    }else{
-
+    }else{ int n = atoi(tr[1]);
+        if (n > 0) {
+            count = 1;
+            for (tPos i = first(L); i != NULL; i = i->next) {
+                if (count == n) {
+                    printf("Command nº%d: %s\n", count, i->data);
+                    // Execute the command here if needed
+                    break;
+                }
+                count++;
+            }
+        } else if (n < 0) {
+            n = -n;
+            count = history_count - n + 1;
+            tPos i = first(L);
+            for (int j = 1; j < count; j++) {
+                i = i->next;
+            }
+            for (; i != NULL; i = i->next) {
+                printf("nº%d command: %s\n", count, i->data);
+                count++;
+            }
+        } else {
+            fprintf(stderr, "Invalid argument for history command\n");
+        }
     }
 }
 
@@ -348,7 +378,7 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *L, int *ope
          Cmd_cd(tr,cmd);
      }else if(strcmp(tr[0], "date") == 0){
          Cmd_date(tr,cmd);
-     }else if(strcmp(tr[0], "hist") == 0){
+     }else if(strcmp(tr[0], "historic") == 0){
          Cmd_hist(tr,cmd, *L);
      }else if(strcmp(tr[0], "open") == 0){
          Cmd_open(tr, openFilesCount);
