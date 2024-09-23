@@ -82,10 +82,12 @@ void EliminarDeFicherosAbiertos(int fd, int *openFilesCount){
     }
 }
 
-void ListFicherosAbiertos(){
-    for (int i = 0; i<MAX; i++){
-        if (openFiles[i].fd != 0){
-            printf("Descriptor: %d, Name: %s, Mode: %d\n", openFiles[i].fd, openFiles[i].name, openFiles[i].mode);
+void ListFicherosAbiertos(int fd, int *openFilesCount){
+    if(fd != -1){
+        for (int i = 0; i<MAX; i++){
+            printf("Descriptor: %d, Name: %s", openFiles[i].fd, openFiles[i].name);
+            Mode(openFiles[i].mode);
+        
         }
     }
 }
@@ -196,7 +198,7 @@ void Cmd_open (char * tr[], int *openFilesCount){
     int i,df, mode=0;      
         
     if (tr[1]==NULL) { /*no hay parametro*/                      
-            ListFicherosAbiertos();
+            ListFicherosAbiertos(0, openFilesCount); /*listar ficheros abiertos*/
         return;                                                  
     }          
     for (i=2; tr[i]!=NULL; i++)
@@ -222,7 +224,7 @@ void Cmd_close (char *tr[], int *openFilesCount){
     int df;
 
     if (tr[1]==NULL || (df=atoi(tr[1]))<0) { /*no hay parametro*/
-        ListFicherosAbiertos(); /*o el descriptor es menor que 0*/
+        ListFicherosAbiertos(0,openFilesCount); /*o el descriptor es menor que 0*/
         return;
     }
 
@@ -240,7 +242,7 @@ void Cmd_dup (char * tr[], int *openFilesCount){
     char aux[MAX],*p;
 
     if (tr[0]==NULL || (df=atoi(tr[0]))<0) { /*no hay parametro*/
-        ListFicherosAbiertos(-1);                 /*o el descriptor es menor que 0*/
+        ListFicherosAbiertos(-1, openFilesCount);                 /*o el descriptor es menor que 0*/
     }
 
     duplicado=dup(df);
