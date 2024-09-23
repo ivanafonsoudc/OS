@@ -77,6 +77,26 @@ char *NombreFicheroDescriptor(int fd){
     return openFiles[fd-1].name;
 }
 
+void Mode(int mode){
+    if (mode & O_CREAT){
+        printf("cr\n");
+    }else if (mode & O_EXCL){
+        printf("ex\n");
+    }else if (mode & O_RDONLY){
+        printf("ro\n");
+    }else if (mode & O_WRONLY){
+        printf("wo\n");
+    }else if (mode & O_RDWR){
+        printf("rw\n");
+    }else if (mode & O_APPEND){
+        printf("ap\n");
+    }else if (mode & O_TRUNC){
+        printf("tr\n");
+    }else{
+        printf("\n");
+    }
+}
+
 void Cmd_authors(char *tr[], char *cmd){
     if (tr[1] == NULL){
         printf("Ivan Afonso Cerdeira: ivan.afonso@udc.es, Minerva Antia Lago Lopez: minerva.lago.lopez@udc.es\n");
