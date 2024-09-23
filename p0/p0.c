@@ -228,27 +228,59 @@ void Cmd_open (char * tr[]){
     }
 }     
 
-void Cmd_close (char *tr[]){                                                      
-    int df;                                         
-                                                   
+/*
+void Cmd_open (char *tr[]){
+int i,df, mode=0;
+	if(tr[1]==NULL){
+		ListFicherosAbiertos();
+		return;
+	}
+	for(i=1; tr[i]!=NULL;i++){
+		if (!strcmp(tr[i],"cr")) mode|=O_CREAT;
+		else if (!strcmp(tr[i],"ex")) mode|=O_EXCL;
+		else if (!strcmp(tr[i],"ro")) mode|=O_RDONLY;
+		else if (!strcmp(tr[i],"wo")) mode|=O_WRONLY;
+		else if (!strcmp(tr[i],"rw")) mode|=O_RDWR;
+		else if (!strcmp(tr[i],"ap")) mode|=O_APPEND;
+		else if (!strcmp(tr[i],"tr")) mode|=O_TRUNC;
+		else break;
+	}
+	else{
+		perror("Imposible abrir fichero");
+	}
+}*/
+void Cmd_close (char *tr[]){
+    int df;
+
     if (tr[1]==NULL || (df=atoi(tr[1]))<0) { /*no hay parametro*/
-        ListFicherosAbiertos(); /*o el descriptor es menor que 0*/                              
-        return;  
-    }                     
-                                           
-    if (close(df)==-1) {  
+        ListFicherosAbiertos(); /*o el descriptor es menor que 0*/
+        return;
+    }
+
+    if (close(df)==-1) {
         perror("Imposible cerrar descriptor");
-    }else{                                                         
+    }else{
         EliminarDeFicherosAbiertos(df);
     }
-}  
+}
 
-void Cmd_dup (char * tr[]){                     
-    int df, duplicado;                        
+/*
+void Cmd_close (char *tr[]){
+int df;
+	if(strcmp(tr[1],"close"){
+		EliminarDeFicherosAbiertos(df);
+	}
+	else{
+		perror("Imposible cerrar descriptor");
+	}
+}*/
+
+void Cmd_dup (char * tr[]){
+    int df, duplicado;
     char aux[MAX],*p;
-                                      
+
     if (tr[0]==NULL || (df=atoi(tr[0]))<0) { /*no hay parametro*/
-        ListFicherosAbiertos(-1);                 /*o el descriptor es menor que 0*/ 
+        ListFicherosAbiertos(-1);                 /*o el descriptor es menor que 0*/
     }
 
     duplicado=dup(df);
@@ -256,6 +288,21 @@ void Cmd_dup (char * tr[]){
       printf (aux,"dup %d (%s)",df, p);
        AnadirFicherosAbiertos(duplicado,aux,fcntl(duplicado,F_GETFL));
 }
+
+/*
+void Cmd_dup (char *tr[]){
+int df,duplicado;
+	if(strcmp(tr[1],"dup"){
+		ListFicherosAbiertos(+1);
+		duplicado=dup(df);
+		p=NombreFicheroDescriptor(df);
+		printf (aux,"dup %d (%s)",df, p);
+		AnadirFicherosAbiertos(duplicado,aux,fcntl(duplicado,F_DUPFD));
+	}
+	else{
+		perror("Duplicado no posible\n");
+	}
+}*/
 
 void Cmd_infosys(char *tr[], char *cmd){
     struct utsname utsname;
@@ -269,6 +316,20 @@ void Cmd_infosys(char *tr[], char *cmd){
         fprintf(stderr,"%s \n",cmd);
     }
 }
+
+/*void Cmd_infosys(char *tr[], char *cmd){
+struct utsname utsname;
+	if (strcmp(tr[1],"infosys"){
+		printf("Nombre del sistema: %s\n", utsname.sysname);
+		printf("Nombre del nodo: %s\n", utsname.nodename);
+		printf("Nombre de la version: %s\n", utsname.release);
+		printf("Nombre de la version: %s\n", utsname.version);
+		printf("Nombre de la version: %s\n", utsname.machine);
+	}
+	else{
+		perror("Comando no encontrado");
+	}
+}*/
 
 void Cmd_help(char *tr[], char *cmd){
   if(tr[1] == LNULL){
