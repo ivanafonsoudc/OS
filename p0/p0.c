@@ -189,38 +189,28 @@ void Cmd_date(char *tr[], char *cmd){
 void Cmd_hist(char *tr[], char *cmd, tListP L){
      int count;
      if(tr[1] == NULL){
-        count = 1;
+        count = 0;
         for(tPos i = first(L); i != LNULL; i = next(i,L)){
             printf("nº%d command:%s\n", count, getItemP(i,L));
             count++;
         }
-    }else{ int n = atoi(tr[1]);
-        if (n > 0) {
-            count = 1;
-            for (tPos i = first(L); i != NULL; i = i->next) {
-                if (count == n) {
-                    printf("Command nº%d: %s\n", count, i->data);
-                    // Execute the command here if needed
-                    break;
+    }else if(strcmp(tr[1],"-")){
+        char *aux = strtok(tr[1],"-");
+        int x = atoi(aux);
+        if(x >= 0){
+            count = 0;
+            for(tPos i = first(L); i != LNULL; i = next(i,L)){
+                if(count >= x){
+                    printf("nº%d command:%s\n", count, getItemP(i,L));
                 }
                 count++;
             }
-        } else if (n < 0) {
-            n = -n;
-            count = history_count - n + 1;
-            tPos i = first(L);
-            for (int j = 1; j < count; j++) {
-                i = i->next;
-            }
-            for (; i != NULL; i = i->next) {
-                printf("nº%d command: %s\n", count, i->data);
-                count++;
-            }
-        } else {
-            fprintf(stderr, "Invalid argument for history command\n");
+        }else{  
+            fprintf(stderr,"%s \n",cmd);
         }
     }
-}
+}    
+
 
 
 
