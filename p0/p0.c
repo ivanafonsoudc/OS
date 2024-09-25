@@ -274,13 +274,14 @@ void Cmd_dup (char * tr[], int *openFilesCount){
 
 
 void Cmd_infosys(char *tr[], char *cmd){
-    struct utsname utsname;
+    struct utsname uts;
     if (tr[1] == NULL){
-        printf("Nombre del sistema: %s\n", utsname.sysname);
-        printf("Nombre del nodo: %s\n", utsname.nodename);
-        printf("Nombre de la version: %s\n", utsname.release);
-        printf("Nombre de la version: %s\n", utsname.version);
-        printf("Nombre de la version: %s\n", utsname.machine);
+        uname(&uts);
+        printf("Systemname: %s\n", uts.sysname);
+        printf("Nodename: %s\n", uts.nodename);
+        printf("Release: %s\n", uts.release);
+        printf("Version: %s\n", uts.version);
+        printf("Machine: %s\n", uts.machine);
     }else{
         fprintf(stderr,"%s \n",cmd);
     }
