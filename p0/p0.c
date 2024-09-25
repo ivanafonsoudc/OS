@@ -47,57 +47,59 @@ void addHistory(char *cmd, char *tr[], tListP *L){
     }
 }
 
-void Mode(int mode){
+const char* Mode(int mode){
     if (mode & O_CREAT){
-        printf("cr\n");
+        return "cr";
     }else if (mode & O_EXCL){
-        printf("ex\n");
+        return "ex";
     }else if (mode & O_RDONLY){
-        printf("ro\n");
+        return "ro";
     }else if (mode & O_WRONLY){
-        printf("wo\n");
+        return "wo";
     }else if (mode & O_RDWR){
-        printf("rw\n");
+        return "rw";
     }else if (mode & O_APPEND){
-        printf("ap\n");
+        return "ap";
     }else if (mode & O_TRUNC){
-        printf("tr\n");
+        return "tr";
     }else{
-        printf("\n");
+        return "unkonwn mode";
     }
 }
 
 void AnadirFicherosAbiertos(int fd, const char *name, int mode, int *openFilesCount){
     openFiles[*openFilesCount].fd = fd;
-    strcpy(openFiles[*openFilesCount].name, name);
     openFiles[*openFilesCount].mode = mode;
-    openFilesCount++;
+    strncpy(openFiles[*openFilesCount].name, name, sizeof(openFiles[*openFilesCount].name)-1);
+    printf("File descriptor %d opened\n", openFiles[*openFilesCount].fd);
+    (*openFilesCount)++;
     
 }
 
 void EliminarDeFicherosAbiertos(int fd, int *openFilesCount){
     for (int i = 0; i<(*openFilesCount);i++){
         if (openFiles[i].fd == fd){
-            printf("File descriptor %d closed\n", fd);
+            printf("File descriptor %d closed\n", openFiles[i].fd);
             for (int j = i; j<(*openFilesCount)-1;j++){
                 openFiles[j] = openFiles[j+1];
             }
-            openFilesCount--;
+            (*openFilesCount)--;
             
-            return;
+            break;
         }
     }
 }
 
 void ListFicherosAbiertos(int fd, int *openFilesCount){
-    if(fd != -1){
-        for (int i = 0; i<MAX; i++){
-            printf("Descriptor: %d, Name: %s", openFiles[i].fd, openFiles[i].name);
-            Mode(openFiles[i].mode);
-        
+    for (int i = 0; i<(*openFilesCount);i++){
+        int flags = fcntl(openFiles[i].fd, F_GETFL);
+        if(flags == -1){
+            perror("fcntl");
         }
+        printf("File descriptor %d: %s, mode: %s\n", openFiles[i].fd, openFiles[i].name, Mode(openFiles[i].mode));
     }
 }
+
 
 char *NombreFicheroDescriptor(int fd){
     return openFiles[fd-1].name;
@@ -194,7 +196,7 @@ void Cmd_hist(char *tr[], char *cmd, tListP L){
             printf("nº%d command:%s\n", count, getItemP(i,L));
             count++;
         }
-    }else if(strcmp(tr[1],"-")){
+    }else if(strcmp(tr[1],"-") == 0){
         char *aux = strtok(tr[1],"-");
         int x = atoi(aux);
         if(x >= 0){
@@ -222,13 +224,13 @@ void Cmd_open (char * tr[], int *openFilesCount){
         return;                                                  
     }          
     for (i=2; tr[i]!=NULL; i++)
-      if (!strcmp(tr[i],"cr")) mode|=O_CREAT;
-      else if (!strcmp(tr[i],"ex")) mode|=O_EXCL;                
-      else if (!strcmp(tr[i],"ro")) mode|=O_RDONLY; 
-      else if (!strcmp(tr[i],"wo")) mode|=O_WRONLY;
-      else if (!strcmp(tr[i],"rw")) mode|=O_RDWR;                
-      else if (!strcmp(tr[i],"ap")) mode|=O_APPEND;
-      else if (!strcmp(tr[i],"tr")) mode|=O_TRUNC; 
+      if (!strcmp(tr[i],"cr")) mode |= O_CREAT;
+      else if (!strcmp(tr[i],"ex")) mode |= O_EXCL;                
+      else if (!strcmp(tr[i],"ro")) mode |= O_RDONLY; 
+      else if (!strcmp(tr[i],"wo")) mode |= O_WRONLY;
+      else if (!strcmp(tr[i],"rw")) mode |= O_RDWR;                
+      else if (!strcmp(tr[i],"ap")) mode |= O_APPEND;
+      else if (!strcmp(tr[i],"tr")) mode |= O_TRUNC; 
       else break;
                           
     if ((df=open(tr[0],mode,0777))==-1)
