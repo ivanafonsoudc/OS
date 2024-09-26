@@ -14,9 +14,11 @@
 #define MAXH 100
 
 int TrocearCadena(char *cadena, char *tr[]);
-void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *L, int *openFilesCount);
+void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList);
 
 int history_count = 0;
+
+
 
 
 typedef struct{
@@ -26,6 +28,122 @@ typedef struct{
 }File;
 
 File openFiles[MAX];
+int openFilesCount = 0;
+
+
+
+typedef struct ComandNode {
+    char name[MAX];            
+    struct ComandNode *next;      
+} ComandNode;
+
+ComandNode *historyList = NULL;
+
+
+
+void addCommand(char *name) {
+    ComandNode *newNode = (ComandNode *)malloc(sizeof(ComandNode));
+    if(newNode == NULL){
+        fprintf(stderr, "Error");
+        return;
+    }   
+    strncpy(newNode->name, name, MAX);
+    newNode->next = historyList;
+    historyList = newNode;
+    
+}
+
+int getTotalHistCount() {
+    ComandNode *current = historyList;
+    int count = 0;
+    while(current != NULL){
+        count++;
+        current = current->next;
+    }
+    return count;
+}
+
+
+
+
+void printHistory(int i){
+    ComandNode *current = historyList;
+    int count = 0;
+    if(i == -1){
+        while(current != NULL){
+        printf("%d %s\n",count, current->name);
+        current = current->next;
+        count++;
+    }
+  }else{
+    while(current != NULL && count < i){
+        current = current->next;
+        count++;
+    }
+    if(current != NULL){
+        printf("%d %s\n",i, current->name);
+    }else{
+        fprintf(stderr,"Error");
+    }
+  }
+}
+
+void printLastNCommands(int n) {        
+    int totalCommands = getTotalHistCount();  // Total de comandos en el historial
+
+    if (n > totalCommands) {
+        n = totalCommands;  // Ajustar si n es mayor al total de comandos
+    }
+
+    ComandNode *current = historyList;
+    ComandNode *nodes[n];  // Array para almacenar los últimos n nodos
+    int count = 0;
+
+    // Recorremos la lista enlazada y almacenamos los últimos n comandos
+    while (current != NULL) {
+        nodes[count % n] = current;  // Usamos el índice circular para almacenar los últimos n comandos
+        count++;
+        current = current->next;
+    }
+
+    // Imprimir los últimos n comandos almacenados
+    int start = count > n ? count % n : 0;
+    int toPrint = count < n ? count : n;
+
+    for (int i = 0; i < toPrint; i++) {
+        printf("%d %s\n", count - toPrint + i, nodes[(start + i) % n]->name);
+    }
+}
+
+/*void printLastNCommands(int n) {
+    int totalCommands = getTotalHistCount();  // Función que devuelve el total de comandos en el historial
+    if (n > totalCommands) {
+        n = totalCommands;  // Si n es mayor que el total de comandos, ajustarlo
+    }
+    ComandNode *current = historyList;
+    int start = totalCommands - n;
+    for (int i = 0; i < start; i++) {
+        current = current->next;
+    }
+
+    for (int i = start; i < totalCommands; i++) {
+        printf("%d %s\n", i, current->name);  // Imprime el comando en la posición i
+        current = current->next;   
+    }
+}*/
+
+
+
+void clearHistory(){
+    ComandNode *current = historyList;
+    ComandNode *next;
+    while(current != NULL){
+        next = current->next;
+        free(current);
+        current = next;
+    }
+    historyList = NULL;
+}   
 
 
 int TrocearCadena(char * cadena, char * tr[]){ 
@@ -41,68 +159,68 @@ int TrocearCadena(char * cadena, char * tr[]){
     
 }
 
-void addHistory(char *cmd, char *tr[], tListP *L){
-    if(tr[0] != NULL){
-    insertItem(cmd, 0, L);
-    }
-}
+char* Mode(int mode){
+    static char result[64];
+    result[0] = '\0';
+    
+    if (mode & O_CREAT) strcat(result, "cr ");
+    if (mode & O_EXCL) strcat(result, "ex ");
+    if (mode & O_RDONLY) strcat(result, "ro ");
+    if (mode & O_WRONLY) strcat(result, "wo ");
+    if (mode & O_RDWR) strcat(result, "rw ");
+    if (mode & O_APPEND) strcat(result, "ap ");
+    if (mode & O_TRUNC) strcat(result, "tr ");
 
-const char* Mode(int mode){
-    if (mode & O_CREAT){
-        return "cr";
-    }else if (mode & O_EXCL){
-        return "ex";
-    }else if (mode & O_RDONLY){
-        return "ro";
-    }else if (mode & O_WRONLY){
-        return "wo";
-    }else if (mode & O_RDWR){
-        return "rw";
-    }else if (mode & O_APPEND){
-        return "ap";
-    }else if (mode & O_TRUNC){
-        return "tr";
+    if (result[0] == '\0'){ 
+        strcpy(result, "unkown mode");
     }else{
-        return "unkonwn mode";
+        result[strlen(result)-1] = '\0';
     }
+    return result;
 }
 
-void AnadirFicherosAbiertos(int fd, const char *name, int mode, int *openFilesCount){
-    openFiles[*openFilesCount].fd = fd;
-    openFiles[*openFilesCount].mode = mode;
-    strncpy(openFiles[*openFilesCount].name, name, sizeof(openFiles[*openFilesCount].name)-1);
-    printf("File descriptor %d opened\n", openFiles[*openFilesCount].fd);
-    (*openFilesCount)++;
+void AnadirFicherosAbiertos(int fd, const char *name, int mode){
+    if(openFilesCount<MAX){
+        openFiles[openFilesCount].fd = fd;
+        strncpy(openFiles[openFilesCount].name, name,MAX);
+        openFiles[openFilesCount].mode = mode;
+        openFilesCount++;
+    }else{
+        fprintf(stderr,"Error");
+    }
     
 }
 
-void EliminarDeFicherosAbiertos(int fd, int *openFilesCount){
-    for (int i = 0; i<(*openFilesCount);i++){
+void EliminarDeFicherosAbiertos(int fd){
+    for (int i = 0; i<openFilesCount;i++){
         if (openFiles[i].fd == fd){
             printf("File descriptor %d closed\n", openFiles[i].fd);
-            for (int j = i; j<(*openFilesCount)-1;j++){
+            for (int j = i; j<openFilesCount-1;j++){
                 openFiles[j] = openFiles[j+1];
             }
-            (*openFilesCount)--;
+            openFilesCount--;
             
             break;
         }
     }
 }
 
-void ListFicherosAbiertos(int fd, int *openFilesCount){
-    for (int i = 0; i<(*openFilesCount);i++){
-        int flags = fcntl(openFiles[i].fd, F_GETFL);
-        if(flags == -1){
-            perror("fcntl");
-        }
-        printf("File descriptor %d: %s, mode: %s\n", openFiles[i].fd, openFiles[i].name, Mode(openFiles[i].mode));
+void ListFicherosAbiertos(int fd, tListP *L){
+    for(int i = 0; i<openFilesCount;i++){
+        printf("Descriptor %d, Name: %s, Mode: %s\n", openFiles[i].fd,openFiles[i].name, Mode(openFiles[i].mode) );
     }
 }
 
 
+
+
 char *NombreFicheroDescriptor(int fd){
-    return openFiles[fd-1].name;
+    for(int i=0; i<openFilesCount;i++){
+        if(openFiles[i].fd == fd){
+            return openFiles[i].name;
+        }
+    }
+    return NULL;
 }
 
 
@@ -188,39 +306,31 @@ void Cmd_date(char *tr[], char *cmd){
 }
 
 
-void Cmd_hist(char *tr[], char *cmd, tListP L){
-     int count;
-     if(tr[1] == NULL){
-        count = 0;
-        for(tPos i = first(L); i != LNULL; i = next(i,L)){
-            printf("nº%d command:%s\n", count, getItemP(i,L));
-            count++;
+void Cmd_hist(char *tr[], char *cmd) {
+    
+    if (tr[1] == NULL) {  // Sin argumentos, imprime todo el historial
+         printHistory(-1);
+    }else if (tr[2] == NULL) {  // Un argumento, imprime el comando en esa posición
+        int n = atoi(tr[1]);
+        if(n>=0){
+            printHistory(n);
+        }else{
+            printLastNCommands(-n); 
         }
-    }else if(strcmp(tr[1],"-") == 0){
-        char *aux = strtok(tr[1],"-");
-        int x = atoi(aux);
-        if(x >= 0){
-            count = 0;
-            for(tPos i = first(L); i != LNULL; i = next(i,L)){
-                if(count >= x){
-                    printf("nº%d command:%s\n", count, getItemP(i,L));
-                }
-                count++;
-            }
-        }else{  
-            fprintf(stderr,"%s \n",cmd);
-        }
-    }
-}    
+    }else {
+        fprintf(stderr,"%s \n",cmd);
+    }    
+}  
 
 
 
 
-void Cmd_open (char * tr[], int *openFilesCount){                                          
+
+void Cmd_open (char * tr[], tListP *openFilesList){                                          
     int i,df, mode=0;      
         
     if (tr[1]==NULL) { /*no hay parametro*/                      
-            ListFicherosAbiertos(0, openFilesCount); /*listar ficheros abiertos*/
+            ListFicherosAbiertos(0, openFilesList); /*listar ficheros abiertos*/
         return;                                                  
     }          
     for (i=2; tr[i]!=NULL; i++)
@@ -232,48 +342,60 @@ void Cmd_open (char * tr[], int *openFilesCount){
       else if (!strcmp(tr[i],"ap")) mode |= O_APPEND;
       else if (!strcmp(tr[i],"tr")) mode |= O_TRUNC; 
       else break;
-                          
-    if ((df=open(tr[0],mode,0777))==-1)
+                     
+    if ((df=open(tr[1],mode,0777))==-1)
         perror ("Imposible abrir fichero");
     else{                
-        AnadirFicherosAbiertos(df,tr[1],mode, openFilesCount);                                                        
-        printf ("Anadida entrada a la tabla ficheros abiertos: Descriptor: %d, Name: %s, Mode: %d\n",df, tr[0], mode);                                               
+        AnadirFicherosAbiertos(df,tr[1],mode);                                                        
+        printf ("Anadida entrada a la tabla de ficheros abiertos.\nDescriptor: %d, Name: %s, Mode: %s\n",df, tr[1], Mode(mode));                                               
     }
 }     
 
 
-void Cmd_close (char *tr[], int *openFilesCount){
+void Cmd_close (char *tr[], tListP *openFilesList){
     int df;
 
     if (tr[1]==NULL || (df=atoi(tr[1]))<0) { /*no hay parametro*/
-        ListFicherosAbiertos(0,openFilesCount); /*o el descriptor es menor que 0*/
+        ListFicherosAbiertos(0,openFilesList); /*o el descriptor es menor que 0*/
         return;
     }
 
     if (close(df)==-1) {
         perror("Imposible cerrar descriptor");
     }else{
-        EliminarDeFicherosAbiertos(df, openFilesCount);
+        EliminarDeFicherosAbiertos(df);
     }
 }
 
 
+void Cmd_dup (char * tr[], tListP *L){
+    int df, duplicado, ormode;
+    char aux[MAX],*orname;;
 
-void Cmd_dup (char * tr[], int *openFilesCount){
-    int df, duplicado;
-    char aux[MAX],*p;
-
-    if (tr[0]==NULL || (df=atoi(tr[0]))<0) { /*no hay parametro*/
-        ListFicherosAbiertos(-1, openFilesCount);                 /*o el descriptor es menor que 0*/
+    if (tr[1]==NULL || (df=atoi(tr[1]))<0) { /*no hay parametro*/
+        ListFicherosAbiertos(-1, L);  
+        return;               /*o el descriptor es menor que 0*/
     }
 
     duplicado=dup(df);
-    p=NombreFicheroDescriptor(df);
-      printf (aux,"dup %d (%s)",df, p);
-       AnadirFicherosAbiertos(duplicado,aux,fcntl(duplicado,F_GETFL), openFilesCount);
+    if(duplicado==-1){
+        perror("Imposible duplicar descriptor");
+        return;
+    }
+
+    orname=NombreFicheroDescriptor(df);
+    ormode=fcntl(df,F_GETFL);
+    if(ormode==-1){
+        perror("Imposible obtener modo de apertura");
+        return;
+    }
+
+    snprintf(aux, MAX, "%s (duplicated)", orname);
+    printf("Descriptor: %d, Name: %s, Mode:%s\n", df,orname,Mode(ormode));
+    AnadirFicherosAbiertos(duplicado,aux,ormode);
+
+
 }
-
-
 
 void Cmd_infosys(char *tr[], char *cmd){
     struct utsname uts;
@@ -292,7 +414,7 @@ void Cmd_infosys(char *tr[], char *cmd){
 
 
 void Cmd_help(char *tr[], char *cmd){
-  if(tr[1] == LNULL){
+  if(tr[1] == NULL){
     printf("Comandos disponibles: authors, pid, ppid, cd, date, historic, open, close, dup, infosys, help, quit,exit,bye\n");
   }else if(strcmp(tr[1],"authors") == 0){
       printf("Prints the names and logins of the program authors. authors -l prints only the logins and authors -n prints only the names\n");
@@ -329,10 +451,13 @@ void Cmd_help(char *tr[], char *cmd){
 }
 
 
-void Cmd_quit(bool *terminado, char *tr[], tListP *L){
+void Cmd_quit(bool *terminado, char *tr[], tListP *openFilesList){
     if(tr[1] == NULL){
         *terminado = true;
-        deleteList(L);
+        clearHistory();
+        if(openFilesList!=NULL){
+            deleteList(openFilesList);
+        }    
     }else{
         printf("Error: Invalid option\n");
     }
@@ -351,15 +476,13 @@ void leerEntrada(char *cmd, char *tr[], char *entrada){
 
 }
 
-void guardarLista(char *entrada,char *tr[], tListP *L){
+void guardarLista(char *entrada,char *tr[]){
     if(tr[0]!=NULL){
-    insertItem(entrada, 0, L); 
+        addCommand(entrada);
     }
-    
-
 }
 
-void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *L, int *openFilesCount){
+void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList){
    if(tr[0] != NULL){
      if(strcmp(tr[0], "authors") == 0){
        Cmd_authors(tr,cmd);
@@ -372,19 +495,19 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *L, int *ope
      }else if(strcmp(tr[0], "date") == 0){
          Cmd_date(tr,cmd);
      }else if(strcmp(tr[0], "historic") == 0){
-         Cmd_hist(tr,cmd, *L);
+         Cmd_hist(tr,cmd);
      }else if(strcmp(tr[0], "open") == 0){
-         Cmd_open(tr, openFilesCount);
+         Cmd_open(tr, openFilesList);
      }else if(strcmp(tr[0], "close") == 0){
-         Cmd_close(tr, openFilesCount);
+         Cmd_close(tr, openFilesList);
      }else if(strcmp(tr[0], "dup") == 0){
-            Cmd_dup(tr, openFilesCount);
+            Cmd_dup(tr, openFilesList);
      }else if(strcmp(tr[0], "infosys") == 0){
             Cmd_infosys(tr,cmd);
      }else if(strcmp(tr[0], "help") == 0){
             Cmd_help(tr,cmd);
      }else if(strcmp(tr[0], "quit") == 0 || strcmp(tr[0], "exit") == 0 || strcmp(tr[0], "bye") == 0){  
-             Cmd_quit(terminado,tr, L);                                   
+             Cmd_quit(terminado,tr, openFilesList);                                   
      }else{ 
         fprintf(stderr,"%s \n",cmd); 
      }
@@ -393,19 +516,20 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *L, int *ope
 
 
 int main(){
-   char entrada[MAX];
-   char cmd[MAX];
-   char *tr[MAXTR];
-   bool terminado = false;
-   int openFilesCount = 0;
-   tListP L;
-   createEmptyList(&L);
-   while (!terminado){
-       imprimirPrompt();
-       leerEntrada(cmd,tr,entrada);
-       guardarLista(entrada,tr,&L);
-       procesarEntrada(cmd,&terminado, tr, &L, &openFilesCount);
-    }
-    return 0;
+    char entrada[MAX];
+    char cmd[MAX];
+    char *tr[MAXTR];
+    bool terminado = false;
+    tListP openFilesList;
+
     
+    createEmptyList(&openFilesList);
+    while (!terminado){
+        imprimirPrompt();
+        leerEntrada(cmd,tr,entrada);
+        guardarLista(entrada, tr);
+        procesarEntrada(cmd,&terminado, tr, &openFilesList);
+        }
+        return 0;
+        
 }

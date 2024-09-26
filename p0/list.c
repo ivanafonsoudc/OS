@@ -14,34 +14,29 @@ bool createNode(tPos *p){
     return (*p) !=LNULL;
 }
 
-bool insertItem(tItemL d,tPos p, tListP *L){
-    tPos q,aux;
+bool insertItem(tItemL d, tListP *L){
+    tPos q, r;
+
     if(!createNode(&q)){
         return false;
     }
-    else{
-        q->data=d;
-        q->next=LNULL;
-        if(isEmptyList(*L)){
-            *L=q;
-        }
-        else if(p==LNULL){
-            for(aux= first(*L);aux->next!=LNULL;aux=aux->next);
-            aux->next=q;
-        }
-        else if(p==*L){
-            q->next=p;
-            *L=q;
-        }
-        else{
-            q->data=p->data;
-            p->data=d;
-            q->next=p->next;
-            p->next=q;
-        }
-        return true;
+    q->data = malloc((strlen(d) + 1) * sizeof (char));
+    if(!q->data){
+        free(q);
+        return false;
     }
+    
+    strcpy(q->data, d);
+    q->next = LNULL;
 
+    if(*L == LNULL){
+        *L = q;
+    }else{
+        r = last(*L);
+        r->next = q;
+    }
+    return true;
+    
 }
 
 
@@ -53,8 +48,11 @@ tPos first(tListP L){
 }
 
 tPos last(tListP L){
+    if(isEmptyList(L)){
+        return LNULL;
+    }
     tPos i;
-    for(i=L;i->next!=LNULL;i=i->next);
+    for(i = L; i->next != LNULL; i = i->next);
     return i;
 }
 
@@ -68,7 +66,7 @@ void RemoveElement(tPos p, tListP *L){
 
 }
 void deleteList(tListP *L){
-    while(first!=LNULL){
+    while(!isEmptyList(*L)){
         RemoveElement(first(*L),L);
     }
 }

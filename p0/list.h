@@ -22,7 +22,7 @@ typedef tPos tListP;
 bool isEmptyList(tListP L);
 void createEmptyList(tListP *L);
 bool createNode(tPos *p);
-bool insertItem(tItemL d, tPos p, tListP *L);
+bool insertItem(tItemL d, tListP *L);
 tItemL getItemP(tPos p, tListP L);
 tPos first(tListP L);
 tPos last(tListP L);
