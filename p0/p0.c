@@ -1,3 +1,12 @@
+/*
+  Practica 0 SO
+  Grupo 1.2
+  Iván Afonso Cerdeira ivan.afonso@udc.es
+  Minerva Antía Lago López minerva.lago.lopez@udc.es
+ */
+
+
+
 #include <stdlib.h>
 #include <fcntl.h>
 #include <string.h>
@@ -28,6 +37,7 @@ typedef struct{
 }File;
 
 File openFiles[MAX];
+
 int openFilesCount = 0;
 
 
@@ -42,19 +52,19 @@ ComandNode *historyList = NULL;
 
 
 void addCommand(char *name) {
-    ComandNode *newNode = (ComandNode *)malloc(sizeof(ComandNode));
+    ComandNode *newNode = (ComandNode *)malloc(sizeof(ComandNode)); 
     if(newNode == NULL){
-        fprintf(stderr, "Error");
+        fprintf(stderr, "Error"); 
         return;
     }   
-    strncpy(newNode->name, name, MAX);
-    newNode->next = historyList;
-    historyList = newNode;
+    strncpy(newNode->name, name, MAX); 
+    newNode->next = historyList; 
+    historyList = newNode; 
     
 }
 
 int getTotalHistCount() {
-    ComandNode *current = historyList;
+    ComandNode *current = historyList; 
     int count = 0;
     while(current != NULL){
         count++;
@@ -62,8 +72,6 @@ int getTotalHistCount() {
     }
     return count;
 }
-
-
 
 
 void printHistory(int i){
@@ -88,37 +96,10 @@ void printHistory(int i){
   }
 }
 
-void printLastNCommands(int n) {        
-    int totalCommands = getTotalHistCount();  // Total de comandos en el historial
-
+void printLastNCommands(int n) {
+    int totalCommands = getTotalHistCount();  
     if (n > totalCommands) {
-        n = totalCommands;  // Ajustar si n es mayor al total de comandos
-    }
-
-    ComandNode *current = historyList;
-    ComandNode *nodes[n];  // Array para almacenar los últimos n nodos
-    int count = 0;
-
-    // Recorremos la lista enlazada y almacenamos los últimos n comandos
-    while (current != NULL) {
-        nodes[count % n] = current;  // Usamos el índice circular para almacenar los últimos n comandos
-        count++;
-        current = current->next;
-    }
-
-    // Imprimir los últimos n comandos almacenados
-    int start = count > n ? count % n : 0;
-    int toPrint = count < n ? count : n;
-
-    for (int i = 0; i < toPrint; i++) {
-        printf("%d %s\n", count - toPrint + i, nodes[(start + i) % n]->name);
-    }
-}
-
-/*void printLastNCommands(int n) {
-    int totalCommands = getTotalHistCount();  // Función que devuelve el total de comandos en el historial
-    if (n > totalCommands) {
-        n = totalCommands;  // Si n es mayor que el total de comandos, ajustarlo
+        n = totalCommands;  
     }
     ComandNode *current = historyList;
     int start = totalCommands - n;
@@ -127,10 +108,10 @@ void printLastNCommands(int n) {
     }
 
     for (int i = start; i < totalCommands; i++) {
-        printf("%d %s\n", i, current->name);  // Imprime el comando en la posición i
+        printf("%d %s\n", i, current->name);  
         current = current->next;   
     }
-}*/
+}
 
 
 
