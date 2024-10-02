@@ -15,6 +15,8 @@
 #include <stdbool.h>
 #include <time.h>
 #include <sys/utsname.h>
+#include <sys/stat.h>
+#include <dirent.h>
 #include <stdio.h>
 #include <errno.h>
 #include "list.h"
@@ -296,7 +298,7 @@ char *NombreFicheroDescriptor(int fd){
 
 
 
-void makedir(const char *nombre_directorio) {
+void Cmd_makedir(const char *nombre_directorio) {
     // Intentar crear el directorio
     if (mkdir(nombre_directorio, 0755) == -1) { //0755 da permisos de lectura, escritura y ejecucion para el propietario. El resto lectura y ejecución
         // Manejar errores
@@ -344,18 +346,34 @@ void Cmd_makefile(char *tr[], char *cmd){
 
 //listfile -long, muestra: nº enlaces, inodo, user,group,permisos,tamaño,nombre
 //ls -l -i 
-void Cmd_listfile(){
-
+void Cmd_listfile(char *tr[], char *cmd){
+    if(tr[1] == NULL){
+        system("ls -l");
+    }else if(strcmp(tr[1], "-long") == 0){
+        system("ls -l -i");
+    }else{
+        fprintf(stderr,"%s \n",cmd);
+    }
 }
 
 //cwd muestra el directorio actual y todo lo que hay en el
 
 void Cmd_cwd(){
-
+    char path[MAX];
+    if(getcwd(path,MAX)==NULL){
+        perror("getcwd");
+    }else{
+        printf("Directorio actual %s\n", path);
+        system("ls");
+    }
 }
 
-void Cmd_listdir(){
-
+void Cmd_listdir(char *tr[], char *cmd){
+    if(tr[1] == NULL){
+        system("ls");
+    }else{
+        fprintf(stderr,"%s \n",cmd);
+    }
 }
 
 
@@ -371,14 +389,67 @@ void Cmd_revlist(){
 }
 
 //erase borra directorio si es un fichero o si es un directorio vacio
-void Cmd_erase(){
+void Cmd_erase(char *tr[], char *cmd){
+    if (tr[1] == NULL){
+        fprintf(stderr,"%s \n",cmd);
+        return;
+    }
+    if(remove(tr[1])==0){
+        printf("Fichero o directorio vacio %s borrado\n", tr[1]);
+    }else{
+        perror("remove");
+    }
 
 }
 
 //delrec borra directorio si es un fichero o si es un directorio no vacio de forma recursiva
-void Cmd_delrec(){
+void Cmd_delrec(char *tr[], char *cmd){
+    if(tr[1] == NULL){
+        fprintf(stderr,"%s \n",cmd);
+        return;
+    }
 
+    char *path = tr[1];
+    struct stat path_stat;
+    if(stat(path, &path_stat) != 0){
+        perror("stat");
+        return;
+    } 
+    if (S_ISDIR(path_stat.st_mode)) {
+        DIR *dir = opendir(path);
+        if (dir == NULL) {
+            perror("opendir");
+            return;
+        }
+
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+                continue;
+            }
+
+            char full_path[1024];
+            snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+            char *new_tr[] = {tr[0], full_path, NULL};
+            Cmd_delrec(new_tr, cmd);
+        }
+
+        closedir(dir);
+
+        if (rmdir(path) == 0) {
+            printf("Directorio %s borrado\n", path);
+        } else {
+            perror("rmdir");
+        }
+    } else {
+        if (remove(path) == 0) {
+            printf("Fichero %s borrado\n", path);
+        } else {
+            perror("remove");
+        }
+    }
 }
+
 
 
 void Cmd_authors(char *tr[], char *cmd){
