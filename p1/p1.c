@@ -674,19 +674,19 @@ void Cmd_help(char *tr[], char *cmd){
   }else if(strcmp(tr[1], "bye") == 0){
       printf("Ends the shell\n");
   }else if(strcmp(tr[1], "makedir") == 0){
-      printf("Creates a directory");  
+      printf("Creates a directory\n");  
   }else if(strcmp(tr[1], "makefile") == 0){
-      printf("creates a file");
+      printf("Creates a file\n");
   }else if(strcmp(tr[1], "listfile") == 0){
-      printf("gives information on files or directories");
+      printf("Gives information on files or directories\n");
   }else if(strcmp(tr[1], "cwd") == 0){
-      printf("prints current working directory");
+      printf("Prints current working directory\n");
   }else if(strcmp(tr[1], "listdir") == 0){
-      printf("lists directories contents");
+      printf("Lists directories contents\n");
   }else if(strcmp(tr[1], "erase") == 0){
-      printf("deletes files and/or empty directories");
+      printf("Deletes files and/or empty directories\n");
   }else if(strcmp(tr[1], "delrec") == 0){
-      printf("deletes files and/or non empty directories recursively");
+      printf("Deletes files and/or non empty directories recursively\n");
   }else{
       fprintf(stderr,"%s \n",cmd);
       }
@@ -755,19 +755,16 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
             Cmd_makedir(tr);
      }else if(strcmp(tr[0], "makefile") == 0){
             Cmd_makefile(tr, cmd);
-<<<<<<< HEAD
-=======
      }else if(strcmp(tr[0], "listfile") == 0){
             Cmd_listfile(tr, cmd);
      }else if(strcmp(tr[0], "cwd") == 0){
             Cmd_cwd();
      }else if(strcmp(tr[0], "listdir") == 0){
             Cmd_listdir(tr,cmd);
-     }else if(stcrmp(tr[1], "erase") == 0){
+     }else if(strcmp(tr[1], "erase") == 0){
             Cmd_erase(tr,cmd);
-     }else if(stcrmp(tr[1], "delrec") == 0){
+     }else if(strcmp(tr[1], "delrec") == 0){
             Cmd_delrec(tr, cmd);
->>>>>>> 41601c2067f871c9c7b6f2d817c88214f738b4e4
      }
      else{ 
         fprintf(stderr,"%s \n",cmd); 
