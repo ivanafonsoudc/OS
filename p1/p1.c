@@ -292,6 +292,10 @@ char *NombreFicheroDescriptor(int fd){
 }
 
 
+
+
+
+
 void makedir(const char *nombre_directorio) {
     // Intentar crear el directorio
     if (mkdir(nombre_directorio, 0755) == -1) { //0755 da permisos de lectura, escritura y ejecucion para el propietario. El resto lectura y ejecución
@@ -318,7 +322,23 @@ void makedir(const char *nombre_directorio) {
     }
 }
 
-    
+
+//makefile, crea un fichero con el nombre que se le pase
+void Cmd_makefile(char *tr[], char *cmd){
+    if(tr[1] != NULL && tr[2] == NULL){
+        int fd = open(tr[1], O_CREAT | O_WRONLY, 0644);
+        if(fd == -1){
+            perror("open");
+        }else{
+            printf("File %s created with descriptor %d\n", tr[1], fd);
+            AnadirFicherosAbiertos(fd, tr[1], O_CREAT | O_WRONLY);
+        }
+    }else{
+        fprintf(stderr,"%s \n",cmd);
+    }
+}
+
+
 //listfile, muestra: nombre y tamaño
 // ls -l
 
@@ -331,6 +351,10 @@ void Cmd_listfile(){
 //cwd muestra el directorio actual y todo lo que hay en el
 
 void Cmd_cwd(){
+
+}
+
+void Cmd_listdir(){
 
 }
 
