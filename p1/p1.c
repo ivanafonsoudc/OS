@@ -292,6 +292,43 @@ char *NombreFicheroDescriptor(int fd){
 }
 
 
+//listfile, muestra: nombre y tamaño
+// ls -l
+
+//listfile -long, muestra: nº enlaces, inodo, user,group,permisos,tamaño,nombre
+//ls -l -i 
+void Cmd_listfile(){
+
+}
+
+//cwd muestra el directorio actual y todo lo que hay en el
+
+void Cmd_cwd(){
+
+}
+
+
+//lista directorios de forma recursiva
+//rec list empieza de fuera hacia adentro
+void Cmd_reclist(){
+
+}
+
+//rev list muestra de dentro hacia afuera
+void Cmd_revlist(){
+
+}
+
+//erase borra directorio si es un fichero o si es un directorio vacio
+void Cmd_erase(){
+
+}
+
+//delrec borra directorio si es un fichero o si es un directorio no vacio de forma recursiva
+void Cmd_delrec(){
+
+}
+
 
 void Cmd_authors(char *tr[], char *cmd){
     if (tr[1] == NULL){
