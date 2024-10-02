@@ -16,6 +16,7 @@
 #include <time.h>
 #include <sys/utsname.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <errno.h>
@@ -51,8 +52,7 @@ typedef struct ComandNode {
 
 ComandNode *historyList = NULL;
 
-char LetraTF (mode_t m)                                                                                                       
-{
+char LetraTF (mode_t m){
      switch (m & S_IFMT) { /*and bit a bit con los bits de formato,0170000 */
         case S_IFSOCK: return 's'; /*socket */
         case S_IFLNK: return 'l'; /*symbolic link*/
@@ -744,7 +744,7 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
      }else if(strcmp(tr[0], "makedir") == 0){
             Cmd_makedir(tr);
      }else if(strcmp(tr[0], "makefile") == 0){
-            Cmd_makefile(tr, *cmd);
+            Cmd_makefile(tr, cmd);
      }
      else{ 
         fprintf(stderr,"%s \n",cmd); 
@@ -759,7 +759,6 @@ int main(){
     char *tr[MAXTR];
     bool terminado = false;
     tListP openFilesList;
-    const char *nombre_directorio = "mi_directorio";
     
 
     
