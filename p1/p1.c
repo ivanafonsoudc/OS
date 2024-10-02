@@ -292,6 +292,33 @@ char *NombreFicheroDescriptor(int fd){
 }
 
 
+void makedir(const char *nombre_directorio) {
+    // Intentar crear el directorio
+    if (mkdir(nombre_directorio, 0755) == -1) { //0755 da permisos de lectura, escritura y ejecucion para el propietario. El resto lectura y ejecución
+        // Manejar errores
+        switch (errno) {
+            case EEXIST:
+                printf("Error: El directorio '%s' ya existe.\n", nombre_directorio);
+            break;
+            case ENOENT:
+                printf("Error: El directorio padre de '%s' no existe.\n", nombre_directorio);
+            break;
+            case EACCES:
+                printf("Error: No tienes permisos para crear el directorio '%s'.\n", nombre_directorio);
+            break;
+            case ENOSPC:
+                printf("Error: No hay suficiente espacio en el dispositivo para crear '%s'.\n", nombre_directorio);
+            break;
+            default:
+                printf("Error desconocido al crear el directorio '%s': %s\n", nombre_directorio, strerror(errno));
+            break;
+        }
+    } else {
+        printf("Directorio '%s' creado correctamente.\n", nombre_directorio);
+    }
+}
+
+    
 //listfile, muestra: nombre y tamaño
 // ls -l
 
