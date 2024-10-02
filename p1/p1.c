@@ -677,6 +677,16 @@ void Cmd_help(char *tr[], char *cmd){
       printf("Creates a directory");  
   }else if(strcmp(tr[1], "makefile") == 0){
       printf("creates a file");
+  }else if(strcmp(tr[1], "listfile") == 0){
+      printf("gives information on files or directories");
+  }else if(strcmp(tr[1], "cwd") == 0){
+      printf("prints current working directory");
+  }else if(strcmp(tr[1], "listdir") == 0){
+      printf("lists directories contents");
+  }else if(strcmp(tr[1], "erase") == 0){
+      printf("deletes files and/or empty directories");
+  }else if(strcmp(tr[1], "delrec") == 0){
+      printf("deletes files and/or non empty directories recursively");
   }else{
       fprintf(stderr,"%s \n",cmd);
       }
@@ -744,7 +754,17 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
      }else if(strcmp(tr[0], "makedir") == 0){
             Cmd_makedir(tr);
      }else if(strcmp(tr[0], "makefile") == 0){
-            Cmd_makefile(tr, *cmd);
+            Cmd_makefile(tr, cmd);
+     }else if(strcmp(tr[0], "listfile") == 0){
+            Cmd_listfile(tr, cmd);
+     }else if(strcmp(tr[0], "cwd") == 0){
+            Cmd_cwd();
+     }else if(strcmp(tr[0], "listdir") == 0){
+            Cmd_listdir(tr,cmd);
+     }else if(stcrmp(tr[1], "erase") == 0){
+            Cmd_erase(tr,cmd);
+     }else if(stcrmp(tr[1], "delrec") == 0){
+            Cmd_delrec(tr, cmd);
      }
      else{ 
         fprintf(stderr,"%s \n",cmd); 
