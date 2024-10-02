@@ -296,30 +296,32 @@ char *NombreFicheroDescriptor(int fd){
 
 
 
-void makedir(const char *nombre_directorio) {
+void Cmd_makedir(char *tr[]) {
     // Intentar crear el directorio
-    if (mkdir(nombre_directorio, 0755) == -1) { //0755 da permisos de lectura, escritura y ejecucion para el propietario. El resto lectura y ejecución
+    if(tr[1] != NULL){
+    if (mkdir(tr[1], 0755) == -1) { //0755 da permisos de lectura, escritura y ejecucion para el propietario. El resto lectura y ejecución
         // Manejar errores
         switch (errno) {
             case EEXIST:
-                printf("Error: El directorio '%s' ya existe.\n", nombre_directorio);
+                printf("Error: El directorio '%s' ya existe.\n", tr[1]);
             break;
             case ENOENT:
-                printf("Error: El directorio padre de '%s' no existe.\n", nombre_directorio);
+                printf("Error: El directorio padre de '%s' no existe.\n", tr[1]);
             break;
             case EACCES:
-                printf("Error: No tienes permisos para crear el directorio '%s'.\n", nombre_directorio);
+                printf("Error: No tienes permisos para crear el directorio '%s'.\n", tr[1]);
             break;
             case ENOSPC:
-                printf("Error: No hay suficiente espacio en el dispositivo para crear '%s'.\n", nombre_directorio);
+                printf("Error: No hay suficiente espacio en el dispositivo para crear '%s'.\n", tr[1]);
             break;
             default:
-                printf("Error desconocido al crear el directorio '%s': %s\n", nombre_directorio, strerror(errno));
+                printf("Error desconocido al crear el directorio '%s': %s\n", tr[1], strerror(errno));
             break;
         }
     } else {
-        printf("Directorio '%s' creado correctamente.\n", nombre_directorio);
+        printf("Directorio '%s' creado correctamente.\n", tr[1]);
     }
+}
 }
 
 
@@ -600,6 +602,10 @@ void Cmd_help(char *tr[], char *cmd){
       printf("Ends the shell\n");
   }else if(strcmp(tr[1], "bye") == 0){
       printf("Ends the shell\n");
+  }else if(strcmp(tr[1], "makedir") == 0){
+      printf("Creates a directory")  
+  }else if(strcmp(tr[1], "makefile") == 0){
+      printf("creates a file")
   }else{
       fprintf(stderr,"%s \n",cmd);
       }
@@ -664,7 +670,12 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
             Cmd_help(tr,cmd);
      }else if(strcmp(tr[0], "quit") == 0 || strcmp(tr[0], "exit") == 0 || strcmp(tr[0], "bye") == 0){  
              Cmd_quit(terminado,tr, openFilesList);                                   
-     }else{ 
+     }else if(strcmp(tr[0], "makedir") == 0){
+            Cmd_makedir(*tr[1]);
+     }else if(strcmp(tr[0], "makefile") == 0){
+            Cmd_makefile(*tr[], *cmd);
+     }
+     else{ 
         fprintf(stderr,"%s \n",cmd); 
      }
    }
@@ -677,6 +688,8 @@ int main(){
     char *tr[MAXTR];
     bool terminado = false;
     tListP openFilesList;
+    const char *nombre_directorio = "mi_directorio";
+    
 
     
     createEmptyList(&openFilesList);
