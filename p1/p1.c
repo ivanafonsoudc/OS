@@ -53,7 +53,7 @@ typedef struct ComandNode {
 ComandNode *historyList = NULL;
 
 char LetraTF (mode_t m){
-     switch (m & S_IFMT) { /*and bit a bit con los bits de formato,0170000 */
+     switch (m&S_IFMT) { /*and bit a bit con los bits de formato,0170000 */
         case S_IFSOCK: return 's'; /*socket */
         case S_IFLNK: return 'l'; /*symbolic link*/
         case S_IFREG: return '-'; /* fichero normal*/
@@ -68,27 +68,29 @@ char LetraTF (mode_t m){
 /*a partir del campo st_mode de la estructura stat */
 /*las tres son correctas pero usan distintas estrategias de asignaciÃ³n de memoria*/
 
-
+/*
 char * ConvierteModo (mode_t m, char *permisos)
 {                                                                    
     strcpy (permisos,"---------- ");
     
     permisos[0]=LetraTF(m);                   
-    if (m&S_IRUSR) permisos[1]='r';    /*propietario*/
+    if (m&S_IRUSR) permisos[1]='r';    //propietario
     if (m&S_IWUSR) permisos[2]='w';
     if (m&S_IXUSR) permisos[3]='x'; 
-    if (m&S_IRGRP) permisos[4]='r';    /*grupo*/
+    if (m&S_IRGRP) permisos[4]='r';    //grupo
     if (m&S_IWGRP) permisos[5]='w';
     if (m&S_IXGRP) permisos[6]='x';                   
-    if (m&S_IROTH) permisos[7]='r';    /*resto*/
+    if (m&S_IROTH) permisos[7]='r';    //resto
     if (m&S_IWOTH) permisos[8]='w';           
     if (m&S_IXOTH) permisos[9]='x';             
-    if (m&S_ISUID) permisos[3]='s';    /*setuid, setgid y stickybit*/
+    if (m&S_ISUID) permisos[3]='s';    //setuid, setgid y stickybit
     if (m&S_ISGID) permisos[6]='s';
     if (m&S_ISVTX) permisos[9]='t';             
                                                       
     return permisos;               
 } 
+
+*/
 
 
 char * ConvierteModo2 (mode_t m)                      
@@ -113,7 +115,7 @@ char * ConvierteModo2 (mode_t m)
     return permisos;                                  
 } 
 
-
+/*
 char * ConvierteModo3 (mode_t m)                
 {   
     char *permisos;                
@@ -123,21 +125,22 @@ char * ConvierteModo3 (mode_t m)
     strcpy (permisos,"---------- ");          
                     
     permisos[0]=LetraTF(m);                   
-    if (m&S_IRUSR) permisos[1]='r';    /*propietario*/
+    if (m&S_IRUSR) permisos[1]='r';    //propietario
     if (m&S_IWUSR) permisos[2]='w'; 
     if (m&S_IXUSR) permisos[3]='x';                   
-    if (m&S_IRGRP) permisos[4]='r';    /*grupo*/
+    if (m&S_IRGRP) permisos[4]='r';    //grupo*
     if (m&S_IWGRP) permisos[5]='w';
     if (m&S_IXGRP) permisos[6]='x';             
-    if (m&S_IROTH) permisos[7]='r';    /*resto*/
+    if (m&S_IROTH) permisos[7]='r';    //resto
     if (m&S_IWOTH) permisos[8]='w';
     if (m&S_IXOTH) permisos[9]='x';             
-    if (m&S_ISUID) permisos[3]='s';    /*setuid, setgid y stickybit*/
+    if (m&S_ISUID) permisos[3]='s';    //setuid, setgid y stickybit
     if (m&S_ISGID) permisos[6]='s';
     if (m&S_ISVTX) permisos[9]='t';                                  
                                    
     return permisos;               
 }    
+*/
 
 
 void addCommand(char *name) {
@@ -381,12 +384,66 @@ void Cmd_listdir(char *tr[], char *cmd){
 
 //lista directorios de forma recursiva
 //rec list empieza de fuera hacia adentro
-void Cmd_reclist(){
+void Cmd_reclist(char *path){
+    DIR *dir = opendir(path);
+    if (dir == NULL) {
+        perror("opendir");
+        return;
+    }
 
+    struct dirent *entry;
+    while((entry = readdir(dir))!=NULL){
+        if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
+            continue;
+        }
+
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        struct stat path_stat;
+        if(stat(full_path, &path_stat) == 0){
+            if(S_ISDIR(path_stat.st_mode)){
+                printf("[DIR] %s\n", full_path);
+                Cmd_reclist(full_path);
+            }else{
+                printf("[FILE] %s\n", full_path);
+            }
+        }else{
+            perror("stat");
+        } 
+    }
+    closedir(dir);
 }
 
 //rev list muestra de dentro hacia afuera
-void Cmd_revlist(){
+void Cmd_revlist(char *path){
+    DIR *dir = opendir(path);
+    if (dir == NULL) {
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    while((entry = readdir(dir))!=NULL){
+        if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
+            continue;
+        }
+        
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        struct stat path_stat;
+        if(stat(full_path, &path_stat) == 0){
+            if(S_ISDIR(path_stat.st_mode)){
+                Cmd_revlist(full_path);
+                printf("[DIR] %s\n", full_path);
+            }else{
+                printf("[FILE] %s\n", full_path);
+            }
+        }else{
+            perror("stat");
+        } 
+    }
+    closedir(dir);    
+
 
 }
 
@@ -761,12 +818,15 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
             Cmd_cwd();
      }else if(strcmp(tr[0], "listdir") == 0){
             Cmd_listdir(tr,cmd);
-     }else if(strcmp(tr[1], "erase") == 0){
+     }else if(strcmp(tr[0], "erase") == 0){
             Cmd_erase(tr,cmd);
-     }else if(strcmp(tr[1], "delrec") == 0){
+     }else if(strcmp(tr[0], "delrec") == 0){
             Cmd_delrec(tr, cmd);
-     }
-     else{ 
+     }else if(strcmp(tr[0], "revlist") == 0){
+            Cmd_revlist(tr[1]);
+     }else if(strcmp(tr[0], "reclist") == 0){
+            Cmd_reclist(tr[1]);       
+     }else{ 
         fprintf(stderr,"%s \n",cmd); 
      }
    }
