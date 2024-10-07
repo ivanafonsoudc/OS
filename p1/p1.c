@@ -20,6 +20,8 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <errno.h>
+#include <pwd.h>
+#include <grp.h>
 #include "list.h"
 #define MAX 1024
 #define MAXTR 100
@@ -68,29 +70,6 @@ char LetraTF (mode_t m){
 /*a partir del campo st_mode de la estructura stat */
 /*las tres son correctas pero usan distintas estrategias de asignaciÃ³n de memoria*/
 
-/*
-char * ConvierteModo (mode_t m, char *permisos)
-{                                                                    
-    strcpy (permisos,"---------- ");
-    
-    permisos[0]=LetraTF(m);                   
-    if (m&S_IRUSR) permisos[1]='r';    //propietario
-    if (m&S_IWUSR) permisos[2]='w';
-    if (m&S_IXUSR) permisos[3]='x'; 
-    if (m&S_IRGRP) permisos[4]='r';    //grupo
-    if (m&S_IWGRP) permisos[5]='w';
-    if (m&S_IXGRP) permisos[6]='x';                   
-    if (m&S_IROTH) permisos[7]='r';    //resto
-    if (m&S_IWOTH) permisos[8]='w';           
-    if (m&S_IXOTH) permisos[9]='x';             
-    if (m&S_ISUID) permisos[3]='s';    //setuid, setgid y stickybit
-    if (m&S_ISGID) permisos[6]='s';
-    if (m&S_ISVTX) permisos[9]='t';             
-                                                      
-    return permisos;               
-} 
-
-*/
 
 
 char * ConvierteModo2 (mode_t m)                      
@@ -115,32 +94,6 @@ char * ConvierteModo2 (mode_t m)
     return permisos;                                  
 } 
 
-/*
-char * ConvierteModo3 (mode_t m)                
-{   
-    char *permisos;                
-
-    if ((permisos=(char *) malloc (12))==NULL)
-        return NULL;
-    strcpy (permisos,"---------- ");          
-                    
-    permisos[0]=LetraTF(m);                   
-    if (m&S_IRUSR) permisos[1]='r';    //propietario
-    if (m&S_IWUSR) permisos[2]='w'; 
-    if (m&S_IXUSR) permisos[3]='x';                   
-    if (m&S_IRGRP) permisos[4]='r';    //grupo*
-    if (m&S_IWGRP) permisos[5]='w';
-    if (m&S_IXGRP) permisos[6]='x';             
-    if (m&S_IROTH) permisos[7]='r';    //resto
-    if (m&S_IWOTH) permisos[8]='w';
-    if (m&S_IXOTH) permisos[9]='x';             
-    if (m&S_ISUID) permisos[3]='s';    //setuid, setgid y stickybit
-    if (m&S_ISGID) permisos[6]='s';
-    if (m&S_ISVTX) permisos[9]='t';                                  
-                                   
-    return permisos;               
-}    
-*/
 
 
 void addCommand(char *name) {
@@ -346,19 +299,65 @@ void Cmd_makefile(char *tr[], char *cmd){
 }
 
 
+void fileinfo(const char *path, const struct stat *file_stat, int longFormat){
+    if(longFormat){
+        printf("%lu\t", file_stat->st_ino);
+        printf("%lu\t", file_stat->st_nlink);
+        printf("%s\t", getpwuid(file_stat->st_uid)->pw_name);
+        printf("%s\t", getgrgid(file_stat->st_gid)->gr_name);
+        printf("%o\t", file_stat->st_mode & 0777);
+        printf("%ld\t", file_stat->st_size);
+        printf("%s\n", path);
+    }else{
+        printf("%ld\t", file_stat->st_size);
+        printf("%s\n", path);
+    }
+}
+
 //listfile, muestra: nombre y tamaño
 // ls -l
 
 //listfile -long, muestra: nº enlaces, inodo, user,group,permisos,tamaño,nombre
 //ls -l -i 
 void Cmd_listfile(char *tr[], char *cmd){
-    if(tr[1] == NULL){
-        system("ls -l");
-    }else if(strcmp(tr[1], "-long") == 0){
-        system("ls -l -i");
-    }else{
-        fprintf(stderr,"%s \n",cmd);
+    DIR *dir = opendir(".");
+    if(dir == NULL){
+        perror("opendir");
+        return;
     }
+
+    struct dirent *entry;
+    int long_format = (tr[1] != NULL && strcmp(tr[1], "-long") == 0);
+
+    while ((entry = readdir(dir)) != NULL){
+        if(strcmp(entry->d_name, ".") == 0 ){
+            continue;
+        }
+
+        struct stat file_stat;
+        if(stat(entry->d_name, &file_stat) == 0){
+            fileinfo(entry->d_name, &file_stat, long_format);
+        }else{
+            perror("stat");
+        }
+    }
+}
+
+void Cmd_listdir(char *tr[], char *cmd){
+    DIR *dir = opendir(".");
+    if(dir == NULL){
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    while((entry = readdir(dir)) != NULL){
+        if((entry->d_name[0]) == '.'){
+            continue;
+            printf("%s\n", entry->d_name);
+        }     
+    }
+    closedir(dir);
 }
 
 //cwd muestra el directorio actual y todo lo que hay en el
@@ -369,17 +368,11 @@ void Cmd_cwd(){
         perror("getcwd");
     }else{
         printf("Directorio actual %s\n", path);
-        system("ls");
+        Cmd_listdir(NULL, NULL);
     }
 }
 
-void Cmd_listdir(char *tr[], char *cmd){
-    if(tr[1] == NULL){
-        system("ls");
-    }else{
-        fprintf(stderr,"%s \n",cmd);
-    }
-}
+
 
 
 //lista directorios de forma recursiva
