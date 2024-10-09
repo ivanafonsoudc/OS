@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <pwd.h>
 #include <grp.h>
+#include <libgen.h>
 #include "list.h"
 #define MAX 1024
 #define MAXTR 100
@@ -354,8 +355,8 @@ void Cmd_listdir(char *tr[], char *cmd){
     while((entry = readdir(dir)) != NULL){
         if((entry->d_name[0]) == '.'){
             continue;
-            printf("%s\n", entry->d_name);
-        }     
+        }    
+         printf("%s\n", entry->d_name); 
     }
     closedir(dir);
 }
@@ -368,7 +369,6 @@ void Cmd_cwd(){
         perror("getcwd");
     }else{
         printf("Directorio actual %s\n", path);
-        Cmd_listdir(NULL, NULL);
     }
 }
 
@@ -377,16 +377,7 @@ void Cmd_cwd(){
 
 //lista directorios de forma recursiva
 //rec list empieza de fuera hacia adentro
-    void Cmd_reclist(char *path, int depth){
-    if(depth <= 0){
-        return;
-    }
-
-    if (path == NULL) {
-        fprintf(stderr, "Path is NULL\n");
-        return;
-    }
-
+void Cmd_reclist(const char *path, int level) {
     DIR *dir = opendir(path);
     if (dir == NULL) {
         perror("opendir");
@@ -394,60 +385,33 @@ void Cmd_cwd(){
     }
 
     struct dirent *entry;
-    
-    char *subdirs[1024];
-    int subdir_count = 0;
-
-    
-    while((entry = readdir(dir)) != NULL){  
-        if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
+
         char full_path[1024];
-            snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
 
-            struct stat path_stat;
-            if(lstat(full_path, &path_stat) == 0){
-                if(S_ISDIR(path_stat.st_mode)){
-                    subdirs[subdir_count] = strdup(entry->d_name);
-                    subdir_count++;
-                } else {
-                    printf("lstat");
-                }
+        struct stat path_stat;
+        if (lstat(full_path, &path_stat) == 0) {
+            for (int i = 0; i < level; i++) {
+                printf("\t");
             }
-        } 
-
-        for (int i = 0; i < subdir_count; i++) {
-            printf("[DIR] %s\n", subdirs[i]);  // Imprimir el nombre del subdirectorio
-            char subdir_path[1024];
-            snprintf(subdir_path, sizeof(subdir_path), "%s/%s", path, subdirs[i]);
-            Cmd_reclist(subdir_path, depth - 1);  
-            free(subdirs[i]);  // Liberara la memoria del nombre del subdirectorio
-       
-       
-        rewinddir(dir);
-
-        
-        while((entry = readdir(dir)) != NULL){
-            if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
-                continue;
-            }
-
-            char full_path[1024];
-            snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-
-            struct stat path_stat;
-            if(lstat(full_path, &path_stat) == 0){
-                if(!S_ISDIR(path_stat.st_mode)){  // Es una fila
-                    printf("[FILE] %s\n", entry->d_name);
-                }
+            if (S_ISDIR(path_stat.st_mode)) {
+                printf("[DIR] %s\n", entry->d_name);
+                Cmd_reclist(full_path, level + 1);
             } else {
-                perror("lstat");
+                printf("[FILE] %s\n", entry->d_name);
             }
+        } else {
+            perror("lstat");
         }
-
-        closedir(dir);
     }
+
+    closedir(dir);
+}
+    
 
 //rev list muestra de dentro hacia afuera
 void Cmd_revlist(char *path, int depth) {           
@@ -479,7 +443,7 @@ void Cmd_revlist(char *path, int depth) {
             } else {                                  
                 perror("stat");                  
             }                                         
-        }                      
+    }                      
             
         // Volver a abrir o directorio para listar os archivos
         rewinddir(dir);
@@ -502,7 +466,7 @@ void Cmd_revlist(char *path, int depth) {
             }       
         }                      
             
-        closedir(dir);    
+    closedir(dir);    
 }
 
 //erase borra directorio si es un fichero o si es un directorio vacio
@@ -881,7 +845,6 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
      }else if(strcmp(tr[0], "delrec") == 0){
             Cmd_delrec(tr, cmd);
      }else if(strcmp(tr[0], "revlist") == 0){
-            //Cmd_revlist(tr[1],1);
             char path[1024]; 
             if (getcwd(path, sizeof(path)) != NULL) { // Obten o directorio actual
                 Cmd_revlist(path, 1);
@@ -896,7 +859,7 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
                 perror("getcwd"); 
             }           
      }else{ 
-        fprintf(stderr,"%s \n",cmd); 
+        fprintf(stderr,"%s \n",cmd);
      }
    }
 }
@@ -918,6 +881,7 @@ int main(){
         guardarLista(entrada, tr);
         procesarEntrada(cmd,&terminado, tr, &openFilesList);
         }
-        return 0;
+    return 0;
         
 }
+    
