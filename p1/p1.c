@@ -300,19 +300,24 @@ void Cmd_makefile(char *tr[], char *cmd){
 }
 
 
-void fileinfo(const char *path, const struct stat *file_stat, int longFormat){
-    if(longFormat){
-        printf("%lu\t", file_stat->st_ino);
-        printf("%lu\t", file_stat->st_nlink);
-        printf("%s\t", getpwuid(file_stat->st_uid)->pw_name);
-        printf("%s\t", getgrgid(file_stat->st_gid)->gr_name);
-        printf("%o\t", file_stat->st_mode & 0777);
-        printf("%ld\t", file_stat->st_size);
-        printf("%s\n", path);
-    }else{
-        printf("%ld\t", file_stat->st_size);
-        printf("%s\n", path);
+void fileinfo(const char *path, const struct stat *file_stat, int longFormat) {
+    char *permisos = ConvierteModo2(file_stat->st_mode);
+    char timebuf[80];
+    struct tm *tm_info;
+
+    tm_info = localtime(&file_stat->st_mtime);
+    strftime(timebuf, sizeof(timebuf), "%d %b %H:%M", tm_info);
+
+    if (longFormat) {
+        printf("%lu ", file_stat->st_ino);
     }
+    printf("%s %5ld %lu %s %s %s\n",
+           permisos,
+           file_stat->st_size,
+           file_stat->st_nlink,
+           getpwuid(file_stat->st_uid)->pw_name,
+           timebuf,
+           path);
 }
 
 //listfile, muestra: nombre y tamaño
@@ -342,6 +347,8 @@ void Cmd_listfile(char *tr[], char *cmd){
             perror("stat");
         }
     }
+
+    closedir(dir);
 }
 
 void Cmd_listdir(char *tr[], char *cmd){
@@ -411,62 +418,51 @@ void Cmd_reclist(const char *path, int level) {
 
     closedir(dir);
 }
-    
 
-//rev list muestra de dentro hacia afuera
-void Cmd_revlist(char *path, int depth) {           
-    if (depth <= 0) {
-        return;                              
-    }           
-        
-    DIR *dir = opendir(path);                      
-    if (dir == NULL) {                       
+
+//revlist empieza de dentro hacia afuera    
+void Cmd_revlist(const char *path, int level) {
+    DIR *dir = opendir(path);               
+    if (dir == NULL) {                                 
         perror("opendir");
-        return;                              
-    }                                              
-            
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {              
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }                                                 
-    
-        char full_path[1024];
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-
-        struct stat path_stat;
-        if (stat(full_path, &path_stat) == 0) {
-                if (S_ISDIR(path_stat.st_mode)) {
-                    printf("[DIR] %s\n", entry->d_name);  // Mostrar solo o nome                                        
-                    Cmd_revlist(full_path, depth - 1); 
-                }                                
-            } else {                                  
-                perror("stat");                  
-            }                                         
-    }                      
-            
-        // Volver a abrir o directorio para listar os archivos
-        rewinddir(dir);
+        return;
+    }                        
         
-        while ((entry = readdir(dir)) != NULL) {
-            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {                                 
-                continue;
-            }                                   
-                
-            char full_path[1024];               
-            snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);                       
-            struct stat path_stat;
-
-            if (stat(full_path, &path_stat) == 0) {
-                if (!S_ISDIR(path_stat.st_mode)) {
-                    printf("[FILE] %s\n", entry->d_name);
-                }                                 
-            } else {                                     
-                perror("stat");
-            }       
-        }                      
+    struct dirent *entry;    
+        
+    // Procesar el contenido del directorio en una sola pasada
+    while ((entry = readdir(dir)) != NULL) {    
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {                                 
+            continue; // Saltar las entradas "." y ".."
+        }  
             
-    closedir(dir);    
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);                       
+        
+        struct stat path_stat;
+        if (lstat(full_path, &path_stat) == 0) {
+            if (S_ISDIR(path_stat.st_mode)) {
+                // Si es un subdirectorio, procesarlo recursivamente primero                                        
+                Cmd_revlist(full_path, level);
+
+                // Después de procesar recursivamente, imprimir el subdirectorio                                          
+                for (int i = 0; i < level+1; i++) {
+                    printf("\t");
+                }                                   
+                printf("[DIR] %s\n", entry->d_name);
+            } else {                                        
+                // Si es un archivo, imprimirlo directamente
+                for (int i = 0; i < level; i++) {
+                    printf("\t");
+                }                                    
+                printf("[FILE] %s\n", entry->d_name);
+            }   
+        } else {            
+            perror("lstat");
+        }
+    }
+
+    closedir(dir);
 }
 
 //erase borra directorio si es un fichero o si es un directorio vacio
@@ -859,7 +855,7 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
                 perror("getcwd"); 
             }           
      }else{ 
-        fprintf(stderr,"%s \n",cmd);
+        fprintf(stderr,"%s \n",cmd); 
      }
    }
 }
@@ -870,10 +866,7 @@ int main(){
     char cmd[MAX];
     char *tr[MAXTR];
     bool terminado = false;
-    tListP openFilesList;
-    
-
-    
+    tListP openFilesList;    
     createEmptyList(&openFilesList);
     while (!terminado){
         imprimirPrompt();
