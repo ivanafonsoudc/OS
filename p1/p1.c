@@ -33,9 +33,6 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
 
 int history_count = 0;
 
-
-
-
 typedef struct{
     int fd;
     char name[MAX];
@@ -45,8 +42,6 @@ typedef struct{
 File openFiles[MAX];
 
 int openFilesCount = 0;
-
-
 
 typedef struct ComandNode {
     char name[MAX];            
@@ -71,8 +66,6 @@ char LetraTF (mode_t m){
 /*a partir del campo st_mode de la estructura stat */
 /*las tres son correctas pero usan distintas estrategias de asignaciÃ³n de memoria*/
 
-
-
 char * ConvierteModo2 (mode_t m)                      
 {                                                     
     static char permisos[12];                     
@@ -95,8 +88,6 @@ char * ConvierteModo2 (mode_t m)
     return permisos;                                  
 } 
 
-
-
 void addCommand(char *name) {
     ComandNode *newNode = (ComandNode *)malloc(sizeof(ComandNode)); 
     if(newNode == NULL){
@@ -118,7 +109,6 @@ int getTotalHistCount() {
     }
     return count;
 }
-
 
 void printHistory(int i){
     ComandNode *current = historyList;
@@ -159,8 +149,6 @@ void printLastNCommands(int n) {
     }
 }
 
-
-
 void clearHistory(){
     ComandNode *current = historyList;
     ComandNode *next;
@@ -171,7 +159,6 @@ void clearHistory(){
     }
     historyList = NULL;
 }   
-
 
 int TrocearCadena(char * cadena, char * tr[]){ 
     int i=1;
@@ -238,9 +225,6 @@ void ListFicherosAbiertos(int fd, tListP *L){
     }
 }
 
-
-
-
 char *NombreFicheroDescriptor(int fd){
     for(int i=0; i<openFilesCount;i++){
         if(openFiles[i].fd == fd){
@@ -249,11 +233,6 @@ char *NombreFicheroDescriptor(int fd){
     }
     return NULL;
 }
-
-
-
-
-
 
 void Cmd_makedir(char *tr[]) {
     // Intentar crear el directorio
@@ -283,7 +262,6 @@ void Cmd_makedir(char *tr[]) {
     }
 }
 
-
 //makefile, crea un fichero con el nombre que se le pase
 void Cmd_makefile(char *tr[], char *cmd){
     if(tr[1] != NULL && tr[2] == NULL){
@@ -298,7 +276,6 @@ void Cmd_makefile(char *tr[], char *cmd){
         fprintf(stderr,"%s \n",cmd);
     }
 }
-
 
 void fileinfo(const char *path, const struct stat *file_stat, int longFormat) {
     char *permisos = ConvierteModo2(file_stat->st_mode);
@@ -367,7 +344,6 @@ void Cmd_listdir(char *tr[], char *cmd){
     }
     closedir(dir);
 }
-
 //cwd muestra el directorio actual y todo lo que hay en el
 
 void Cmd_cwd(){
@@ -378,9 +354,6 @@ void Cmd_cwd(){
         printf("Directorio actual %s\n", path);
     }
 }
-
-
-
 
 //lista directorios de forma recursiva
 //rec list empieza de fuera hacia adentro
@@ -418,7 +391,6 @@ void Cmd_reclist(const char *path, int level) {
 
     closedir(dir);
 }
-
 
 //revlist empieza de dentro hacia afuera    
 void Cmd_revlist(const char *path, int level) {
@@ -527,8 +499,6 @@ void Cmd_delrec(char *tr[], char *cmd){
     }
 }
 
-
-
 void Cmd_authors(char *tr[], char *cmd){
     if (tr[1] == NULL){
         printf("Ivan Afonso Cerdeira: ivan.afonso@udc.es, Minerva Antia Lago Lopez: minerva.lago.lopez@udc.es\n");
@@ -609,7 +579,6 @@ void Cmd_date(char *tr[], char *cmd){
     }
 }
 
-
 void Cmd_hist(char *tr[], char *cmd) {
     
     if (tr[1] == NULL) {  // Sin argumentos, imprime todo el historial
@@ -625,10 +594,6 @@ void Cmd_hist(char *tr[], char *cmd) {
         fprintf(stderr,"%s \n",cmd);
     }    
 }  
-
-
-
-
 
 void Cmd_open (char * tr[], tListP *openFilesList){                                          
     int i,df, mode=0;      
@@ -655,7 +620,6 @@ void Cmd_open (char * tr[], tListP *openFilesList){
     }
 }     
 
-
 void Cmd_close (char *tr[], tListP *openFilesList){
     int df;
 
@@ -670,7 +634,6 @@ void Cmd_close (char *tr[], tListP *openFilesList){
         EliminarDeFicherosAbiertos(df);
     }
 }
-
 
 void Cmd_dup (char * tr[], tListP *L){
     int df, duplicado, ormode;
@@ -714,8 +677,6 @@ void Cmd_infosys(char *tr[], char *cmd){
         fprintf(stderr,"%s \n",cmd);
     }
 }
-
-
 
 void Cmd_help(char *tr[], char *cmd){
   if(tr[1] == NULL){
@@ -767,7 +728,6 @@ void Cmd_help(char *tr[], char *cmd){
       }
 
 }
-
 
 void Cmd_quit(bool *terminado, char *tr[], tListP *openFilesList){
     if(tr[1] == NULL){
@@ -859,7 +819,6 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
      }
    }
 }
-
 
 int main(){
     char entrada[MAX];
