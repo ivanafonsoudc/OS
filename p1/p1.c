@@ -539,11 +539,13 @@ void Cmd_cd(char *tr[], char *cmd){
         if (chdir(tr[1])== -1){
             printf("No se ha podido cambiar de directorio\n");
         }else{
-            chdir(tr[1]);
-            printf("Directorio cambiado a %s\n", tr[1]);
+             if (getcwd(path, MAX) == NULL) {
+                perror("getcwd");
+            } else {
+                printf("Directorio cambiado a %s\n", path);
+            }
         }
-    }
-    else{
+    }else{
         fprintf(stderr,"%s \n",cmd);
 
    }
