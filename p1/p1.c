@@ -526,14 +526,16 @@ void Cmd_revlist(char *tr[], char *cmd){
 
 //erase borra directorio si es un fichero o si es un directorio vacio
 void Cmd_erase(char *tr[], char *cmd){
-    if (tr[1] == NULL){
-        fprintf(stderr,"%s \n",cmd);
-        return;
-    }
-    if(remove(tr[1])==0){
-        printf("Fichero o directorio vacio %s borrado\n", tr[1]);
-    }else{
-        perror("remove");
+   for(int i = 1; tr[i] != NULL; i++){
+        if(tr[i] != NULL){
+            if (remove(tr[i]) == 0) {
+                printf("Fichero %s borrado\n", tr[i]);
+            } else {
+                perror("remove");
+            }
+        }else{
+            fprintf(stderr,"%s \n",cmd);
+        }
     }
 
 }
