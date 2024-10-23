@@ -31,6 +31,8 @@
 int TrocearCadena(char *cadena, char *tr[]);
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList);
 
+int max_depth=0;
+
 int history_count = 0;
 
 typedef struct{
@@ -49,6 +51,14 @@ typedef struct ComandNode {
 } ComandNode;
 
 ComandNode *historyList = NULL;
+
+typedef struct {
+    char path[MAX];
+    int level;
+} FileEntry;
+
+FileEntry entries[MAX];
+int entry_count = 0;
 
 char LetraTF (mode_t m){
      switch (m&S_IFMT) { /*and bit a bit con los bits de formato,0170000 */
@@ -302,7 +312,7 @@ void fileinfo(const char *path, const struct stat *file_stat, int longFormat) {
 
 //listfile -long, muestra: nº enlaces, inodo, user,group,permisos,tamaño,nombre
 //ls -l -i 
-void Cmd_listfile(char *tr[], char *cmd){
+void Cmd_listdir(char *tr[], char *cmd){
     DIR *dir = opendir(".");
     if(dir == NULL){
         perror("opendir");
@@ -328,22 +338,25 @@ void Cmd_listfile(char *tr[], char *cmd){
     closedir(dir);
 }
 
-void Cmd_listdir(char *tr[], char *cmd){
-    DIR *dir = opendir(".");
-    if(dir == NULL){
-        perror("opendir");
+void Cmd_listfile(char *tr[], char *cmd){
+
+    int long_format = (tr[1] != NULL && strcmp(tr[1], "-long") == 0);
+    int start = 1 + long_format;
+    if(tr[1] == NULL){
+        fprintf(stderr,"%s \n",cmd);
         return;
     }
 
-    struct dirent *entry;
-    while((entry = readdir(dir)) != NULL){
-        if((entry->d_name[0]) == '.'){
-            continue;
-        }    
-         printf("%s\n", entry->d_name); 
-    }
-    closedir(dir);
+    struct stat file_stat;
+    for(int i = start; tr[i] != NULL; i++){
+        if(stat(tr[i], &file_stat) == 0){
+            fileinfo(tr[i], &file_stat, long_format);
+        }else{
+            perror("stat");
+        }
+    }    
 }
+
 //cwd muestra el directorio actual y todo lo que hay en el
 
 void Cmd_cwd(){
@@ -355,9 +368,47 @@ void Cmd_cwd(){
     }
 }
 
+void find_max_depth(const char *path, int level) {
+    DIR *dir = opendir(path);
+    if (dir == NULL) {
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        char full_path[MAX];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        struct stat path_stat;
+        if (lstat(full_path, &path_stat) == 0) {
+            if (S_ISDIR(path_stat.st_mode)) {
+                if (level + 1 > max_depth) {
+                    max_depth = level + 1;
+                }
+                find_max_depth(full_path, level + 1);
+            }
+        } else {
+            perror("lstat");
+        }
+    }
+    closedir(dir);
+}
+
+int get_max_depth(const char *path) {
+    max_depth = 0;
+    find_max_depth(path, 0);
+    return max_depth;
+}
+
 //lista directorios de forma recursiva
 //rec list empieza de fuera hacia adentro
-void Cmd_reclist(const char *path, int level) {
+void reclist_aux(const char *path, int level) {
+    
     DIR *dir = opendir(path);
     if (dir == NULL) {
         perror("opendir");
@@ -380,7 +431,7 @@ void Cmd_reclist(const char *path, int level) {
             }
             if (S_ISDIR(path_stat.st_mode)) {
                 printf("[DIR] %s\n", entry->d_name);
-                Cmd_reclist(full_path, level + 1);
+                reclist_aux(full_path, level + 1);
             } else {
                 printf("[FILE] %s\n", entry->d_name);
             }
@@ -392,50 +443,86 @@ void Cmd_reclist(const char *path, int level) {
     closedir(dir);
 }
 
-//revlist empieza de dentro hacia afuera    
-void Cmd_revlist(const char *path, int level) {
-    DIR *dir = opendir(path);               
-    if (dir == NULL) {                                 
+void Cmd_reclist(char *tr[], char *cmd){
+    char path[1024]; 
+    int level = 0;
+    if (getcwd(path, sizeof(path)) != NULL) { // Obten o directorio actual
+        reclist_aux(path, level);
+    } else {
+        perror("getcwd"); 
+    }    
+}       
+    
+
+
+void guardar_entries_revlist(const char *path, int level) {
+    DIR *dir = opendir(path);
+    if (dir == NULL) {
         perror("opendir");
         return;
-    }                        
-        
-    struct dirent *entry;    
-        
-    // Procesar el contenido del directorio en una sola pasada
-    while ((entry = readdir(dir)) != NULL) {    
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {                                 
-            continue; // Saltar las entradas "." y ".."
-        }  
-            
-        char full_path[1024];
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);                       
-        
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        char full_path[MAX];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
         struct stat path_stat;
         if (lstat(full_path, &path_stat) == 0) {
-            if (S_ISDIR(path_stat.st_mode)) {
-                // Si es un subdirectorio, procesarlo recursivamente primero                                        
-                Cmd_revlist(full_path, level);
+            entries[entry_count].level = level;
+            strncpy(entries[entry_count].path, full_path, MAX);
+            entry_count++;
 
-                // Después de procesar recursivamente, imprimir el subdirectorio                                          
-                for (int i = 0; i < level+1; i++) {
-                    printf("\t");
-                }                                   
-                printf("[DIR] %s\n", entry->d_name);
-            } else {                                        
-                // Si es un archivo, imprimirlo directamente
-                for (int i = 0; i < level; i++) {
-                    printf("\t");
-                }                                    
-                printf("[FILE] %s\n", entry->d_name);
-            }   
-        } else {            
+            if (S_ISDIR(path_stat.st_mode)) {
+                guardar_entries_revlist(full_path, level - 1);
+            }
+        } else {
             perror("lstat");
         }
     }
-
     closedir(dir);
 }
+
+void print_entries_revlist() {
+    for (int i = entry_count - 1; i >= 0; i--) {
+        struct stat path_stat;
+        if (lstat(entries[i].path, &path_stat) == 0) {
+            for (int j = 0; j < entries[i].level; j++) {
+                printf("\t");
+            }
+            
+            if (S_ISDIR(path_stat.st_mode)) {
+                printf("[DIR] %s\n", basename(entries[i].path));
+            } else {
+                printf("[FILE] %s\n", basename(entries[i].path));
+            }
+        } else {
+            perror("lstat");
+        }
+    }
+}
+
+void revlist_aux(const char *path, int level) {
+    entry_count = 0;
+    guardar_entries_revlist(path, level);
+    print_entries_revlist();
+}
+
+
+void Cmd_revlist(char *tr[], char *cmd){
+    char path[1024]; 
+    if (getcwd(path, sizeof(path)) != NULL) { // Obten o directorio actual
+        revlist_aux(path, get_max_depth(path) - 1);
+    } else {
+        perror("getcwd"); 
+        } 
+}
+
+
 
 //erase borra directorio si es un fichero o si es un directorio vacio
 void Cmd_erase(char *tr[], char *cmd){
@@ -803,23 +890,13 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
      }else if(strcmp(tr[0], "delrec") == 0){
             Cmd_delrec(tr, cmd);
      }else if(strcmp(tr[0], "revlist") == 0){
-            char path[1024]; 
-            if (getcwd(path, sizeof(path)) != NULL) { // Obten o directorio actual
-                Cmd_revlist(path, 1);
-            } else {
-                perror("getcwd"); 
-            } 
+            Cmd_revlist(tr, cmd);
      }else if(strcmp(tr[0], "reclist") == 0){
-            char path[1024]; 
-            if (getcwd(path, sizeof(path)) != NULL) { // Obten o directorio actual
-                Cmd_reclist(path, 1);
-            } else {
-                perror("getcwd"); 
-            }           
-     }else{ 
+            Cmd_reclist(tr, cmd);
+     } else{ 
         fprintf(stderr,"%s \n",cmd); 
      }
-   }
+  }
 }
 
 int main(){
