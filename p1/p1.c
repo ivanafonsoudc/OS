@@ -542,12 +542,13 @@ void Cmd_erase(char *tr[], char *cmd){
 
 //delrec borra directorio si es un fichero o si es un directorio no vacio de forma recursiva
 void Cmd_delrec(char *tr[], char *cmd){
-    if(tr[1] == NULL){
+   for(int i = 1; tr[i] != NULL; i++){
+    if(tr[i] == NULL){
         fprintf(stderr,"%s \n",cmd);
         return;
     }
 
-    char *path = tr[1];
+    char *path = tr[i];
     struct stat path_stat;
     if(stat(path, &path_stat) != 0){
         perror("stat");
@@ -586,6 +587,7 @@ void Cmd_delrec(char *tr[], char *cmd){
             perror("remove");
         }
     }
+   }
 }
 
 void Cmd_authors(char *tr[], char *cmd){
