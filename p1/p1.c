@@ -56,6 +56,8 @@ ComandNode *historyList = NULL;
 typedef struct {
     char path[MAX];
     int level;
+    int is_dir; // Add this line
+    off_t size; // Add this line to store the size of the file
 } FileEntry;
 
 FileEntry entries[MAX];
@@ -297,17 +299,19 @@ void Cmd_makefile(char *tr[], char *cmd){
 
 void fileinfo(const char *path, struct stat *file_stat, int long_format, int acc_time, int link_info) {
     const char *filename = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
+
     if (long_format) {
         char timebuf[80];
         struct tm *tm_info = localtime(&file_stat->st_mtime);
         strftime(timebuf, sizeof(timebuf), "%Y/%m/%d-%H:%M", tm_info);
 
-        printf("%s %3lu (%8ld) %8s %8s %10o %8ld %s\n",
+        printf("%s %3lu (%8ld) %8s %8s %12s %10o %8ld %s\n",
                timebuf,
                file_stat->st_nlink,
                (long)file_stat->st_ino,
                getpwuid(file_stat->st_uid)->pw_name,
                getgrgid(file_stat->st_gid)->gr_name,
+               ConvierteModo2(file_stat->st_mode),
                file_stat->st_mode & 0777,
                file_stat->st_size,
                filename);
@@ -575,71 +579,113 @@ void Cmd_reclist(char *tr[], char *cmd) {
         }
     }
 }    
-    
-void guardar_entries_revlist(const char *path, int level, int show_hidden) {
-    DIR *dir = opendir(path);
-    if (dir == NULL) {
-        perror("opendir");
-        return;
-    }
 
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
+void guardar_entries_revlist(const char *path, int level, int show_hidden) {                                          
+    DIR *dir = opendir(path);                         
+    if (dir == NULL) {                          
+        perror("opendir");                           
+        return;                                       
+    }                                           
+                                             
+    struct dirent *entry;                       
+                                                
+    // Guardar el directorio actual
+    struct stat dir_stat;                       
+    if (lstat(path, &dir_stat) == 0 && entry_count < MAX) {
+        strncpy(entries[entry_count].path, path, MAX);
+        entries[entry_count].level = level;                       
+        entries[entry_count].is_dir = 1; // Marcar como directorio
+        entries[entry_count].size = dir_stat.st_size; // Tamaño del directorio                                                         
+        entry_count++; 
+    }                                                             
+                              
+    // Leer el contenido del directorio         
+    while ((entry = readdir(dir)) != NULL) {         
         if (!show_hidden && entry->d_name[0] == '.') {
             continue;
-        }
-
+        }                                    
+                                                
         char full_path[MAX];
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);                                          
+                                                       
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {                                                       
+            continue; 
+        }            
         struct stat path_stat;
         if (lstat(full_path, &path_stat) == 0) {
-            entries[entry_count].level = level;
-            strncpy(entries[entry_count].path, full_path, MAX);
-            entry_count++;
-
-            if (S_ISDIR(path_stat.st_mode)) {
-                guardar_entries_revlist(full_path, level + 1, show_hidden);
-            }
-        } else {
+            // Si es directorio, llama recursivamente
+            if (S_ISDIR(path_stat.st_mode)) {        
+                guardar_entries_revlist(full_path, level + 1, show_hidden);                                         
+            } else {                            
+                // Si es archivo, lo guarda en la lista solo si no ha sido guardado antes  
+                int is_duplicate = 0;
+                for (int i = 0; i < entry_count; i++) {
+                    if (strcmp(entries[i].path, full_path) == 0) {
+                        is_duplicate = 1; // Ya está en la lista  
+                        break;                                    
+                    }                                             
+                }                                               
+                if (!is_duplicate && entry_count < MAX) {
+                    strncpy(entries[entry_count].path, full_path, MAX);                    
+                    entries[entry_count].level = level;
+                    entries[entry_count].is_dir = 0; // Marcar como archivo                
+                    entries[entry_count].size = path_stat.st_size; // Guardar el tamaño del archivo
+                    entry_count++;
+                }                 
+            }    
+        } else {            
             perror("lstat");
-        }
-    }
+        }                   
+    }    
+    
     closedir(dir);
-}
+}                 
 
-void print_entries_revlist(int long_format, int acc_time, int link_info) {
+
+void print_entries_revlist(int long_format, int acc_time, int link_info) {                                                
+    // Imprimir directorios primero
     for (int i = entry_count - 1; i >= 0; i--) {
-        struct stat path_stat; 
-        if (lstat(entries[i].path, &path_stat) == 0) {
-            if (S_ISDIR(path_stat.st_mode)) {
+        if (entries[i].is_dir) {                                     
+            struct stat dir_stat;                                   
+            if (lstat(entries[i].path, &dir_stat) == 0) {
                 printf("************%s\n", entries[i].path);
+
+                // Imprimir archivos del directorio actual
                 for (int j = entry_count - 1; j >= 0; j--) {
-                    struct stat file_stat;
-                    if (lstat(entries[j].path, &file_stat) == 0) {
-                        if (!S_ISDIR(file_stat.st_mode) && strstr(entries[j].path, entries[i].path) == entries[j].path) {
-                            fileinfo(entries[j].path, &file_stat, long_format, acc_time, link_info);
+                    if (!entries[j].is_dir) {
+                        struct stat file_stat;
+                        if (lstat(entries[j].path, &file_stat) == 0) {
+                            // Asegurarse de que el archivo pertenece al directorio actual exactamente
+                            const char *dir_prefix = entries[i].path;
+                            const char *file_path = entries[j].path;
+
+                            // Comparar el prefijo del directorio con el archivo
+                            if (strncmp(file_path, dir_prefix, strlen(dir_prefix)) == 0) {
+                                // Asegurarse de que el siguiente carácter es '/' para no incluir archivos de subdirectorios
+                                if (file_path[strlen(dir_prefix)] == '/') {
+                                    // Solo imprime archivos directamente bajo este directorio
+                                    const char *relative_path = file_path + strlen(dir_prefix) + 1; // Salta el '/'
+
+                                    // Verificar que no contiene subdirectorios en el nombre restante
+                                    if (strchr(relative_path, '/') == NULL) {
+                                        fileinfo(file_path, &file_stat, long_format, acc_time, link_info);  
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-            } else {
-                fileinfo(entries[i].path, &path_stat, long_format, acc_time, link_info);
             }
-        } else {
-            perror("lstat");
         }
     }
 }
 
 void revlist_aux(const char *path, int level, int show_hidden, int long_format, int acc_time, int link_info) {
-    entry_count = 0;
-    guardar_entries_revlist(path, level, show_hidden);
-    print_entries_revlist(long_format, acc_time, link_info);
+    entry_count = 0; // Reinicia el contador de entradas
+    guardar_entries_revlist(path, level, show_hidden); // Guarda las entradas del directorio y sus subdirectorios
+    print_entries_revlist(long_format, acc_time, link_info); // Imprime las entradas guardadas
 }
+
 
 void Cmd_revlist(char *tr[], char *cmd){
     char path[MAX];
@@ -653,10 +699,10 @@ void Cmd_revlist(char *tr[], char *cmd){
     for (int i = start_index; tr[i] != NULL; i++) {
         if (strcmp(tr[i], "-?") == 0) {
             printf("revlist [-hid][-long][-link][-acc] n1 n2 ..\tlista recursivamente contenidos de directorios (subdirs antes)\n");
-            printf("\t-hid: incluye los ficheros ocultos\n");
-            printf("\t-long: listado largo\n");
-            printf("\t-acc: acesstime\n");
-            printf("\t-link: si es enlace simbolico, el path contenido\n");
+            printf("%s", "\t-hid: incluye los ficheros ocultos\n");
+            printf("%s", "\t-long: listado largo\n");
+            printf("%s", "\t-acc: acesstime\n");
+            printf("%s", "\t-link: si es enlace simbolico, el path contenido\n");
             return;
         }if (strcmp(tr[i], "-hid") == 0) {
             show_hidden = 1;
@@ -687,11 +733,12 @@ void Cmd_revlist(char *tr[], char *cmd){
         for (int i = start_index; tr[i] != NULL; i++) {
             strncpy(path, tr[i], sizeof(path) - 1);
             path[sizeof(path) - 1] = '\0'; // Ensure null-termination
-            printf("Listing directory: %s\n", path);
             revlist_aux(path, 0, show_hidden, long_format, acc_time, link_info);
         }
     }
 }
+
+
 
 //erase borra directorio si es un fichero o si es un directorio vacio
 void Cmd_erase(char *tr[], char *cmd){
