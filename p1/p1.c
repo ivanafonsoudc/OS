@@ -33,9 +33,10 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
 
 int max_depth=0;
 
+
 int history_count = 0;
 
-typedef struct{
+typedef struct File{
     int fd;
     char name[MAX];
     int mode;
@@ -123,23 +124,21 @@ int getTotalHistCount() {
 void printHistory(int i){
     ComandNode *current = historyList;
     int count = 0;
-    if(i == -1){
-        while(current != NULL){
-        printf("%d %s\n",count, current->name);
-        current = current->next;
-        count++;
-        }
-    }else{
-    while(current != NULL && count < i){
+    int totalCommands = getTotalHistCount();
+    char *commands[totalCommands];
+    // Store commands in an array
+    while(current != NULL){
+        commands[count] = current->name;
         current = current->next;
         count++;
     }
-    if(current != NULL){
-        printf("%d %s\n",i, current->name);
-    }else{
-        fprintf(stderr,"Error");
+
+    // Print all commands in reverse order
+    for(int j = totalCommands - 1; j >= 0; j--){
+        printf("%d-> %s\n", totalCommands - j, commands[j]);
     }
-  }
+    
+  
 }
 
 void printLastNCommands(int n) {
@@ -331,7 +330,6 @@ void fileinfo(const char *path, struct stat *file_stat, int long_format, int acc
         printf("%8ld  %s\n", file_stat->st_size, filename);
     }
 }
-
 //listfile, muestra: nombre y tamaño
 // ls -l
 
@@ -436,9 +434,6 @@ void Cmd_listfile(char *tr[], char *cmd) {
 }
 
 //cwd muestra el directorio actual y todo lo que hay en el
-
-
-
 void find_max_depth(const char *path, int level) {
     DIR *dir = opendir(path);
     if (dir == NULL) {
@@ -475,8 +470,6 @@ int get_max_depth(const char *path) {
     find_max_depth(path, 0);
     return max_depth;
 }
-
-
 
 void reclist_aux(const char *path, int level, int show_hidden, int long_format, int acc_time, int link_info) {
     DIR *dir = opendir(path);
@@ -529,7 +522,6 @@ void reclist_aux(const char *path, int level, int show_hidden, int long_format, 
             
     closedir(dir);                             
 }  
-
 
 void Cmd_reclist(char *tr[], char *cmd) {
     char path[MAX];
@@ -584,8 +576,6 @@ void Cmd_reclist(char *tr[], char *cmd) {
     }
 }    
     
-
-
 void guardar_entries_revlist(const char *path, int level, int show_hidden) {
     DIR *dir = opendir(path);
     if (dir == NULL) {
@@ -624,7 +614,7 @@ void guardar_entries_revlist(const char *path, int level, int show_hidden) {
 
 void print_entries_revlist(int long_format, int acc_time, int link_info) {
     for (int i = entry_count - 1; i >= 0; i--) {
-        struct stat path_stat;
+        struct stat path_stat; 
         if (lstat(entries[i].path, &path_stat) == 0) {
             if (S_ISDIR(path_stat.st_mode)) {
                 printf("************%s\n", entries[i].path);
@@ -632,10 +622,12 @@ void print_entries_revlist(int long_format, int acc_time, int link_info) {
                     struct stat file_stat;
                     if (lstat(entries[j].path, &file_stat) == 0) {
                         if (!S_ISDIR(file_stat.st_mode) && strstr(entries[j].path, entries[i].path) == entries[j].path) {
-                            fileinfo(entries[j].path + strlen(entries[i].path) + 1, &file_stat, long_format, acc_time, link_info);
+                            fileinfo(entries[j].path, &file_stat, long_format, acc_time, link_info);
                         }
                     }
                 }
+            } else {
+                fileinfo(entries[i].path, &path_stat, long_format, acc_time, link_info);
             }
         } else {
             perror("lstat");
@@ -649,10 +641,8 @@ void revlist_aux(const char *path, int level, int show_hidden, int long_format, 
     print_entries_revlist(long_format, acc_time, link_info);
 }
 
-
 void Cmd_revlist(char *tr[], char *cmd){
-     char path[MAX];
-    int level = 0;
+    char path[MAX];
     int show_hidden = 0;
     int long_format = 0;
     int acc_time = 0;
@@ -662,7 +652,7 @@ void Cmd_revlist(char *tr[], char *cmd){
     // Parse flags
     for (int i = start_index; tr[i] != NULL; i++) {
         if (strcmp(tr[i], "-?") == 0) {
-            printf("reclist [-hid][-long][-link][-acc] n1 n2 ..\tlista recursivamente contenidos de directorios (subdirs antes)\n");
+            printf("revlist [-hid][-long][-link][-acc] n1 n2 ..\tlista recursivamente contenidos de directorios (subdirs antes)\n");
             printf("\t-hid: incluye los ficheros ocultos\n");
             printf("\t-long: listado largo\n");
             printf("\t-acc: acesstime\n");
@@ -698,12 +688,10 @@ void Cmd_revlist(char *tr[], char *cmd){
             strncpy(path, tr[i], sizeof(path) - 1);
             path[sizeof(path) - 1] = '\0'; // Ensure null-termination
             printf("Listing directory: %s\n", path);
-            revlist_aux(path, level, show_hidden, long_format, acc_time, link_info);
+            revlist_aux(path, 0, show_hidden, long_format, acc_time, link_info);
         }
     }
 }
-
-
 
 //erase borra directorio si es un fichero o si es un directorio vacio
 void Cmd_erase(char *tr[], char *cmd){
@@ -872,10 +860,21 @@ void Cmd_hist(char *tr[], char *cmd) {
 void Cmd_open (char * tr[], tListP *openFilesList){                                          
     int i,df, mode=0;      
         
-    if (tr[1]==NULL) { /*no hay parametro*/                      
-            ListFicherosAbiertos(0, openFilesList); /*listar ficheros abiertos*/
+    if (tr[1]==NULL) {                       
+            ListFicherosAbiertos(0, openFilesList); 
         return;                                                  
     }          
+     	
+    if (strcmp(tr[1], "-?") == 0) {
+        printf("open fich m1 m2...    Abre el fichero fich\n");
+        printf("    y lo anade a la lista de ficheros abiertos del shell\n");
+        printf("    m1, m2..es el modo de apertura (or bit a bit de los siguientes)\n");
+        printf("    cr: O_CREAT    ap: O_APPEND\n");
+        printf("    ex: O_EXCL     ro: O_RDONLY\n");
+        printf("    rw: O_RDWR     wo: O_WRONLY\n");
+        printf("    tr: O_TRUNC\n");
+        return;
+    }
     for (i=2; tr[i]!=NULL; i++)
       if (!strcmp(tr[i],"cr")) mode |= O_CREAT;
       else if (!strcmp(tr[i],"ex")) mode |= O_EXCL;                
@@ -892,7 +891,7 @@ void Cmd_open (char * tr[], tListP *openFilesList){
         AnadirFicherosAbiertos(df,tr[1],mode);                                                        
         printf ("Anadida entrada a la tabla de ficheros abiertos.\nDescriptor: %d, Name: %s, Mode: %s\n",df, tr[1], Mode(mode));                                               
     }
-}     
+} 
 
 void Cmd_close (char *tr[], tListP *openFilesList){
     int df;
@@ -932,7 +931,6 @@ void Cmd_dup (char * tr[], tListP *L){
     }
 
     snprintf(aux, MAX, "%s (duplicated)", orname);
-    printf("Descriptor: %d, Name: %s, Mode:%s\n", df,orname,Mode(ormode));
     AnadirFicherosAbiertos(duplicado,aux,ormode);
 
 
@@ -953,57 +951,112 @@ void Cmd_infosys(char *tr[], char *cmd){
 }
 
 void Cmd_help(char *tr[], char *cmd){
-  if(tr[1] == NULL){
-    printf("Comandos disponibles: authors, pid, ppid, cd, date, historic, open, close, dup, infosys, help, quit,exit,bye\n");
-  }else if(strcmp(tr[1],"authors") == 0){
-      printf("Prints the names and logins of the program authors. authors -l prints only the logins and authors -n prints only the names\n");
-  }else if(strcmp(tr[1], "pid") == 0){
-      printf("Prints the pid of the process executing the shell\n");
-  }else if(strcmp(tr[1], "ppid") == 0){
-      printf("Prints the pid of the shell’s parent process\n");
-  }else if(strcmp(tr[1], "cd") == 0){
-      printf("Changes the current working directory of the shell to dir (using the chdir system call). When invoked without auguments it prints the current working directory (using the getcwd system call)\n");
-  }else if(strcmp(tr[1], "date") == 0){
-      printf("Prints the current date in the format DD/MM/YYYY and the current time in the format hh:mm:ss.\n date -d Prints the current date in the format DD/MM/YYYY\n date -t Prints and the current time in the format hh:mm:ss.\n");
-  }else if(strcmp(tr[1], "historic") == 0){
-      printf("Shows the historic of commands executed by this shell. In order to do this, a list to store all the commands input to the shell must be implemented.\n – historic Prints all the comands that have been input with their order number\n – historic N Repeats command number N (from historic list)\n – historic -N Prints only the lastN comands\n");
-  }else if(strcmp(tr[1], "open") == 0){
-      printf("Opens a file and adds it (together with the file descriptor and the opening mode to the list of shell open files.\n For the mode we’ll use cr for O_CREAT, ap for O_APPEND, ex for O_EXCL, ro for O_RDONLY, rw for O_RDWR, wo for O_WRONLY and tr for O_TRUNC\n");
-  }else if(strcmp(tr[1], "close") == 0){
-      printf("Closes the df file descriptor and eliminates the corresponding item from the list\n");
-  }else if(strcmp(tr[1], "dup") == 0){
-      printf("Duplicates of the df file descriptor\n");
-  }else if(strcmp(tr[1], "infosys") == 0){
-      printf("Prints information on the machine running the shell\n");
-  }else if(strcmp(tr[1], "help") == 0){
-      printf("help displays a list of available commands. help cmd gives a brief help on the usage of comand cmd\n");
-  }else if(strcmp(tr[1], "quit") == 0){
-      printf("Ends the shell\n");
-  }else if(strcmp(tr[1], "exit") == 0){
-      printf("Ends the shell\n");
-  }else if(strcmp(tr[1], "bye") == 0){
-      printf("Ends the shell\n");
-  }else if(strcmp(tr[1], "makedir") == 0){
-      printf("Creates a directory\n");  
-  }else if(strcmp(tr[1], "makefile") == 0){
-      printf("Creates a file\n");
-  }else if(strcmp(tr[1], "listfile") == 0){
-      printf("Gives information on files or directories\n");
-  }else if(strcmp(tr[1], "cwd") == 0){
-      printf("Prints current working directory\n");
-  }else if(strcmp(tr[1], "listdir") == 0){
-    printf("Lists directories contents\n");
-  }else if(strcmp(tr[1], "revlist")==0){
-    printf("lists directories recursively (subdirectories before)\n");
-  }else if(strcmp(tr[1], "reclist")==0){
-    printf("lists directories recursively (subdirectories after)\n");
-  }else if(strcmp(tr[1], "erase") == 0){
-      printf("Deletes files and/or empty directories\n");
-  }else if(strcmp(tr[1], "delrec") == 0){
-      printf("Deletes files and/or non empty directories recursively\n");
-  }else{
-      fprintf(stderr,"%s \n",cmd);
-      }
+    if (tr[1] == NULL || strcmp(tr[1], "-?") == 0) {
+        printf("help [cmd|-lt|-T|-all]    Muestra ayuda sobre los comandos\n");
+        printf("    -lt: lista topics de ayuda\n");
+        printf("    -T topic: lista comandos sobre ese topic\n");
+        printf("    cmd: info sobre el comando cmd\n");
+        printf("    -all: lista todos los topics con sus comandos\n");
+        return;
+    }
+    if (strcmp(tr[1], "-lt") == 0) {
+        printf("Topics de ayuda disponibles:\n");
+        printf("    archivos\n");
+        printf("    directorios\n");
+        printf("    sistema\n");
+        return;
+    }
+
+     if (strcmp(tr[1], "-T") == 0 && tr[2] != NULL) {
+        if (strcmp(tr[2], "archivos") == 0) {
+            printf("Comandos sobre archivos:\n");
+            printf("    open: Abre un archivo\n");
+            printf("    close: Cierra un archivo\n");
+            printf("    list: Lista archivos\n");
+        } else if (strcmp(tr[2], "directorios") == 0) {
+            printf("Comandos sobre directorios:\n");
+            printf("    cd: Cambia de directorio\n");
+            printf("    makedir: Crea un directorio\n");
+            printf("    makefile: Crea un archivo\n");
+        } else if (strcmp(tr[2], "sistema") == 0) {
+            printf("Comandos sobre el sistema:\n");
+            printf("    infosys: Muestra información del sistema\n");
+            printf("    historic: Muestra el historial de comandos\n");
+        } else {
+            printf("Topic no encontrado: %s\n", tr[2]);
+        }
+        return;
+    }
+    if (strcmp(tr[1], "-all") == 0) {
+        printf("Todos los topics con sus comandos:\n");
+        printf("archivos:\n");
+        printf("    open: Abre un archivo\n");
+        printf("    close: Cierra un archivo\n");
+        printf("    list: Lista archivos\n");
+        printf("directorios:\n");
+        printf("    cd: Cambia de directorio\n");
+        printf("    makedir: Crea un directorio\n");
+        printf("    makefile: Crea un archivo\n");
+        printf("    reclist: Lista directorios recursivamente de fuera hacia adentro\n");
+        printf("    revlist: Lista directorios recursivamente de adentro hacia fuera\n");
+        printf("sistema:\n");
+        printf("    infosys: Muestra información del sistema\n");
+        printf("    historic: Muestra el historial de comandos\n");
+        printf("    help: Muestra ayuda sobre los comandos\n");
+        return;
+    }
+
+    if(tr[1] == NULL){
+        printf("Comandos disponibles: authors, pid, ppid, cd, date, historic, open, close, dup, infosys, help, quit,exit,bye\n");
+    }else if(strcmp(tr[1],"authors") == 0){
+        printf("Prints the names and logins of the program authors. authors -l prints only the logins and authors -n prints only the names\n");
+    }else if(strcmp(tr[1], "pid") == 0){
+        printf("Prints the pid of the process executing the shell\n");
+    }else if(strcmp(tr[1], "ppid") == 0){
+        printf("Prints the pid of the shell’s parent process\n");
+    }else if(strcmp(tr[1], "cd") == 0){
+        printf("Changes the current working directory of the shell to dir (using the chdir system call). When invoked without auguments it prints the current working directory (using the getcwd system call)\n");
+    }else if(strcmp(tr[1], "date") == 0){
+        printf("Prints the current date in the format DD/MM/YYYY and the current time in the format hh:mm:ss.\n date -d Prints the current date in the format DD/MM/YYYY\n date -t Prints and the current time in the format hh:mm:ss.\n");
+    }else if(strcmp(tr[1], "historic") == 0){
+        printf("Shows the historic of commands executed by this shell. In order to do this, a list to store all the commands input to the shell must be implemented.\n – historic Prints all the comands that have been input with their order number\n – historic N Repeats command number N (from historic list)\n – historic -N Prints only the lastN comands\n");
+    }else if(strcmp(tr[1], "open") == 0){
+        printf("Opens a file and adds it (together with the file descriptor and the opening mode to the list of shell open files.\n For the mode we’ll use cr for O_CREAT, ap for O_APPEND, ex for O_EXCL, ro for O_RDONLY, rw for O_RDWR, wo for O_WRONLY and tr for O_TRUNC\n");
+    }else if(strcmp(tr[1], "close") == 0){
+        printf("Closes the df file descriptor and eliminates the corresponding item from the list\n");
+    }else if(strcmp(tr[1], "dup") == 0){
+        printf("Duplicates of the df file descriptor\n");
+    }else if(strcmp(tr[1], "infosys") == 0){
+        printf("Prints information on the machine running the shell\n");
+    }else if(strcmp(tr[1], "help") == 0){
+        printf("help displays a list of available commands. help cmd gives a brief help on the usage of comand cmd\n");
+    }else if(strcmp(tr[1], "quit") == 0){
+        printf("Ends the shell\n");
+    }else if(strcmp(tr[1], "exit") == 0){
+        printf("Ends the shell\n");
+    }else if(strcmp(tr[1], "bye") == 0){
+        printf("Ends the shell\n");
+    }else if(strcmp(tr[1], "makedir") == 0){
+        printf("Creates a directory\n");  
+    }else if(strcmp(tr[1], "makefile") == 0){
+        printf("Creates a file\n");
+    }else if(strcmp(tr[1], "listfile") == 0){
+        printf("Gives information on files or directories\n");
+    }else if(strcmp(tr[1], "cwd") == 0){
+        printf("Prints current working directory\n");
+    }else if(strcmp(tr[1], "listdir") == 0){
+        printf("Lists directories contents\n");
+    }else if(strcmp(tr[1], "revlist")==0){
+        printf("lists directories recursively (subdirectories before)\n");
+    }else if(strcmp(tr[1], "reclist")==0){
+        printf("lists directories recursively (subdirectories after)\n");
+    }else if(strcmp(tr[1], "erase") == 0){
+        printf("Deletes files and/or empty directories\n");
+    }else if(strcmp(tr[1], "delrec") == 0){
+        printf("Deletes files and/or non empty directories recursively\n");
+    }else{
+        fprintf(stderr,"%s \n",cmd);
+        }
 
 }
 
@@ -1033,8 +1086,10 @@ void leerEntrada(char *cmd, char *tr[], char *entrada){
 }
 
 void guardarLista(char *entrada,char *tr[]){
-    if(tr[0]!=NULL){
-        addCommand(entrada);
+    for(int i = 0; i < MAXTR; i++){
+        if(tr[i] != NULL){
+            addCommand(entrada);
+        }
     }
 }
 
