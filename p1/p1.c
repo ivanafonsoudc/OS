@@ -297,6 +297,7 @@ void Cmd_makefile(char *tr[], char *cmd){
 }
 
 void fileinfo(const char *path, struct stat *file_stat, int long_format, int acc_time, int link_info) {
+    const char *filename = strrchr(path, '/') ? strrchr(path, '/') + 1 : path;
     if (long_format) {
         char timebuf[80];
         struct tm *tm_info = localtime(&file_stat->st_mtime);
@@ -310,24 +311,24 @@ void fileinfo(const char *path, struct stat *file_stat, int long_format, int acc
                getgrgid(file_stat->st_gid)->gr_name,
                file_stat->st_mode & 0777,
                file_stat->st_size,
-               path);
+               filename);
     } else if (acc_time) {
         char timebuf[80];
         struct tm *tm_info = localtime(&file_stat->st_atime);
         strftime(timebuf, sizeof(timebuf), "%Y/%m/%d-%H:%M", tm_info);
 
-        printf("%8ld  %s %s\n", file_stat->st_size, timebuf, path);
+        printf("%8ld  %s %s\n", file_stat->st_size, timebuf, filename);
     } else if (link_info && S_ISLNK(file_stat->st_mode)) {
         char link_target[MAX];
         ssize_t len = readlink(path, link_target, sizeof(link_target) - 1);
         if (len != -1) {
             link_target[len] = '\0';
-            printf("%s -> %s\n", path, link_target);
+            printf("%s -> %s\n", filename, link_target);
         } else {
             perror("readlink");
         }
     } else {
-        printf("%8ld  %s\n", file_stat->st_size, path);
+        printf("%8ld  %s\n", file_stat->st_size, filename);
     }
 }
 
@@ -475,53 +476,60 @@ int get_max_depth(const char *path) {
     return max_depth;
 }
 
-//lista directorios de forma recursiva
-//rec list empieza de fuera hacia adentro
+
+
 void reclist_aux(const char *path, int level, int show_hidden, int long_format, int acc_time, int link_info) {
     DIR *dir = opendir(path);
     if (dir == NULL) {
         perror("opendir");
         return;
-    }
-
-    printf("************%s\n", path);
-
-    struct dirent *entry;
-    struct stat path_stat;
+    }                                                     
+    
+    struct dirent *entry;                       
+    struct stat path_stat;                               
     char full_path[MAX];
 
-    // First, print files
+    printf("************%s\n", path);  // Imprime el directorio actual al iniciar                                                            
+            
+    // Primero, listar todos los directorios y archivos en este nivel
     while ((entry = readdir(dir)) != NULL) {
-        if (!show_hidden && entry->d_name[0] == '.') {
+        // Si no se muestran los ocultos y el archivo es oculto, se omite
+        if (!show_hidden && entry->d_name[0] == '.') {   
             continue;
+        }   
+    
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);                                                    
+    
+        if (lstat(full_path, &path_stat) == 0) {
+            // Mostrar información del archivo/directorio
+            fileinfo(full_path, &path_stat, long_format, acc_time, link_info);                                                       
         }
-
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-
-        if (lstat(full_path, &path_stat) == 0 && !S_ISDIR(path_stat.st_mode)) {
-            fileinfo(full_path, &path_stat, long_format, acc_time, link_info);
-        }
-    }
-
-    // Reset directory stream to the beginning
+    }                                                         
+            
+    // Resetear el flujo del directorio para volver a leer    
     rewinddir(dir);
-
-    // Then, print directories
-    while ((entry = readdir(dir)) != NULL) {
+    while ((entry = readdir(dir)) != NULL) {                      
+        // Omitir los directorios "." y ".." para la recursión
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) { 
+            continue;                                        
+        }   
+    
+        // Si no se muestran los ocultos y el archivo es oculto, se omite          
         if (!show_hidden && entry->d_name[0] == '.') {
             continue;
-        }
+        }         
+    
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);                                                              
+    
+        if (lstat(full_path, &path_stat) == 0 && S_ISDIR(path_stat.st_mode)) {     
+            // Recursivamente listar los contenidos del directorio
+            reclist_aux(full_path, level + 1, show_hidden, long_format, acc_time, link_info);                 
+        }   
+    }                                                        
+            
+    closedir(dir);                             
+}  
 
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-
-        if (lstat(full_path, &path_stat) == 0 && S_ISDIR(path_stat.st_mode)) {
-            fileinfo(full_path, &path_stat, long_format, acc_time, link_info);
-            reclist_aux(full_path, level + 1, show_hidden, long_format, acc_time, link_info);
-        }
-    }
-
-    closedir(dir);
-}
 
 void Cmd_reclist(char *tr[], char *cmd) {
     char path[MAX];
