@@ -63,6 +63,11 @@ typedef struct {
 FileEntry entries[MAX];
 int entry_count = 0;
 
+void freeEntries() {
+    entry_count = 0;
+}   
+
+
 char LetraTF (mode_t m){
      switch (m&S_IFMT) { /*and bit a bit con los bits de formato,0170000 */
         case S_IFSOCK: return 's'; /*socket */
@@ -305,16 +310,17 @@ void fileinfo(const char *path, struct stat *file_stat, int long_format, int acc
         struct tm *tm_info = localtime(&file_stat->st_mtime);
         strftime(timebuf, sizeof(timebuf), "%Y/%m/%d-%H:%M", tm_info);
 
-        printf("%s %3lu (%8ld) %8s %8s %12s %10o %8ld %s\n",
+        char *mode_str = ConvierteModo2(file_stat->st_mode);
+
+        printf("%s %3lu (%8ld) %8s %8s %12s %8ld %s\n",
                timebuf,
                file_stat->st_nlink,
                (long)file_stat->st_ino,
                getpwuid(file_stat->st_uid)->pw_name,
                getgrgid(file_stat->st_gid)->gr_name,
-               ConvierteModo2(file_stat->st_mode),
-               file_stat->st_mode & 0777,
+                mode_str,
                file_stat->st_size,
-               filename);
+               filename);              
     } else if (acc_time) {
         char timebuf[80];
         struct tm *tm_info = localtime(&file_stat->st_atime);
@@ -333,6 +339,7 @@ void fileinfo(const char *path, struct stat *file_stat, int long_format, int acc
     } else {
         printf("%8ld  %s\n", file_stat->st_size, filename);
     }
+    
 }
 //listfile, muestra: nombre y tamaño
 // ls -l
@@ -578,6 +585,7 @@ void Cmd_reclist(char *tr[], char *cmd) {
             reclist_aux(path, level, show_hidden, long_format, acc_time, link_info);
         }
     }
+
 }    
 
 void guardar_entries_revlist(const char *path, int level, int show_hidden) {                                          
@@ -639,8 +647,7 @@ void guardar_entries_revlist(const char *path, int level, int show_hidden) {
     }    
     
     closedir(dir);
-}                 
-
+}  
 
 void print_entries_revlist(int long_format, int acc_time, int link_info) {          
     // Array para llevar el control de archivos ya impresos
@@ -734,6 +741,8 @@ void Cmd_revlist(char *tr[], char *cmd){
             revlist_aux(path, 0, show_hidden, long_format, acc_time, link_info);
         }
     }
+
+    
 }
 
 
@@ -1112,6 +1121,7 @@ void Cmd_quit(bool *terminado, char *tr[], tListP *openFilesList){
         if(openFilesList!=NULL){
             deleteList(openFilesList);
         }    
+        freeEntries();    
     }else{
         printf("Error: Invalid option\n");
     }
@@ -1135,7 +1145,7 @@ void guardarLista(char *entrada,char *tr[]){
         if(tr[i] != NULL){
             addCommand(entrada);
         }
-    }
+    }                
 }
 
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList){
@@ -1189,9 +1199,9 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
 }
 
 int main(){
-    char entrada[MAX];
-    char cmd[MAX];
-    char *tr[MAXTR];
+    char entrada[MAX] = {0};
+    char cmd[MAX] = {0};
+    char *tr[MAXTR] = {0};
     bool terminado = false;
     tListP openFilesList;    
     createEmptyList(&openFilesList);
@@ -1200,8 +1210,7 @@ int main(){
         leerEntrada(cmd,tr,entrada);
         guardarLista(entrada, tr);
         procesarEntrada(cmd,&terminado, tr, &openFilesList);
-        }
-    clearHistory();    
+        }   
     return 0;
         
 }
