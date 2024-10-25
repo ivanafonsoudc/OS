@@ -57,8 +57,8 @@ int totalCommands = 0;
 typedef struct {
     char path[MAX];
     int level;
-    int is_dir; // Add this line
-    off_t size; // Add this line to store the size of the file
+    int is_dir;
+    off_t size; 
 } FileEntry;
 
 FileEntry entries[MAX];
@@ -81,9 +81,6 @@ char LetraTF (mode_t m){
         default: return '?'; /*desconocido, no deberia aparecer*/
      }
 }
-/*las siguientes funciones devuelven los permisos de un fichero en formato rwx----*/
-/*a partir del campo st_mode de la estructura stat */
-/*las tres son correctas pero usan distintas estrategias de asignaciÃ³n de memoria*/
 
 char * ConvierteModo2 (mode_t m)                      
 {                                                     
@@ -409,7 +406,7 @@ void Cmd_listfile(char *tr[], char *cmd) {
     int link_info = 0;
     int start_index = 1;
 
-    // Parse flags
+    // flags
     for (int i = 1; tr[i] != NULL; i++) {
         if (strcmp(tr[i], "-long") == 0) {
             long_format = 1;
@@ -425,7 +422,7 @@ void Cmd_listfile(char *tr[], char *cmd) {
         }
     }
 
-    // Check if no files are provided
+    // Comprobar si no se proporcionan directorios
     if (tr[start_index] == NULL) {
         Cmd_cwd();
         return;
@@ -540,7 +537,7 @@ void Cmd_reclist(char *tr[], char *cmd) {
     int link_info = 0;
     int start_index = 1;
 
-    // Parse flags
+    //flags
     for (int i = start_index; tr[i] != NULL; i++) {
         if (strcmp(tr[i], "-?") == 0) {
             printf("reclist [-hid][-long][-link][-acc] n1 n2 ..\tlista recursivamente contenidos de directorios (subdirs antes)\n");
@@ -567,7 +564,7 @@ void Cmd_reclist(char *tr[], char *cmd) {
     }
 
     if (tr[start_index] == NULL) {
-        // No directory provided, use current directory
+        // No se proporcionó directorio, usar el directorio actual
         if (getcwd(path, sizeof(path)) != NULL) {
             printf("Current directory: %s\n", path);
         } else {
@@ -681,8 +678,8 @@ void print_entries_revlist(int long_format, int acc_time, int link_info, int sho
 
                 // Imprime los directorios . y .. si show_hidden está habilitado
                 if (show_hidden) {
-                    char dot_path[MAX + 3]; // Increase buffer size to accommodate additional characters
-                    char dotdot_path[MAX + 4]; // Increase buffer size to accommodate additional characters
+                    char dot_path[MAX + 3]; // Aumentar el tamaño del buffer para acomodar caracteres adicionales
+                    char dotdot_path[MAX + 4]; // Aumentar el tamaño del buffer para acomodar caracteres adicionales
                     snprintf(dot_path, sizeof(dot_path), "%s/.", entries[i].path);
                     snprintf(dotdot_path, sizeof(dotdot_path), "%s/..", entries[i].path);
 
@@ -717,7 +714,7 @@ void Cmd_revlist(char *tr[], char *cmd){
     int link_info = 0;
     int start_index = 1;
 
-    // Parse flags
+    //flags
     for (int i = start_index; tr[i] != NULL; i++) {
         if (strcmp(tr[i], "-?") == 0) {
             printf("revlist [-hid][-long][-link][-acc] n1 n2 ..\tlista recursivamente contenidos de directorios (subdirs antes)\n");
@@ -744,14 +741,14 @@ void Cmd_revlist(char *tr[], char *cmd){
     }
 
     if (tr[start_index] == NULL) {
-        // No directory provided, use current directory
+        // No se proporcionó directorio, usar el directorio actual
         if (getcwd(path, sizeof(path)) != NULL) {
             printf("Current directory: %s\n", path);
         } else {
             perror("getcwd");
         }
     } else {
-        // Iterate over all provided directories
+        // Iterar sobre todos los directorios proporcionados
         for (int i = start_index; tr[i] != NULL; i++) {
             strncpy(path, tr[i], sizeof(path) - 1);
             path[sizeof(path) - 1] = '\0'; // Ensure null-termination
