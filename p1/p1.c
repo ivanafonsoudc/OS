@@ -1193,14 +1193,12 @@ void leerEntrada(char *cmd, char *tr[], char *entrada){
 
 
 
-
 void guardarLista(char *entrada, char *tr[]) {
-    static char *lastCommand = NULL;
-
     // Guardar el comando en el historial
     addCommand(tr);
 
     // Actualizar el último comando guardado
+    static char *lastCommand = NULL;
     if (lastCommand != NULL) {
         free(lastCommand);
     }
