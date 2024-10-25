@@ -33,7 +33,7 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
 
 int max_depth=0;
 
-
+char *history[MAXH];
 int history_count = 0;
 
 typedef struct File{
@@ -118,6 +118,8 @@ void addCommand(char *name) {
     
 }
 
+
+
 int getTotalHistCount() {
     ComandNode *current = historyList; 
     int count = 0;
@@ -127,6 +129,7 @@ int getTotalHistCount() {
     }
     return count;
 }
+
 
 void printHistory(int i){
     ComandNode *current = historyList;
@@ -975,6 +978,11 @@ void Cmd_close (char *tr[], tListP *openFilesList){
         return;
     }
 
+    if(strcmp(tr[1], "-?") == 0){
+        printf("close df	Cierra el descriptor df y elimina el correspondiente fichero de la lista de ficheros abiertos\n");
+        return;
+    }
+
     if (close(df)==-1) {
         perror("Imposible cerrar descriptor");
     }else{
@@ -989,6 +997,11 @@ void Cmd_dup (char * tr[], tListP *L){
     if (tr[1]==NULL || (df=atoi(tr[1]))<0) { /*no hay parametro*/
         ListFicherosAbiertos(-1, L);  
         return;               /*o el descriptor es menor que 0*/
+    }
+
+    if(strcmp(tr[1], "-?")==0){
+        printf("dup df	Duplica el descriptor de fichero df y anade una nueva entrada a la lista ficheros abiertos\n");
+        return;
     }
 
     duplicado=dup(df);
@@ -1156,16 +1169,31 @@ void leerEntrada(char *cmd, char *tr[], char *entrada){
     strcpy(cmd,entrada);
     strtok(cmd,"\n");
     TrocearCadena(entrada,tr);
-
-
 }
 
+/*
 void guardarLista(char *entrada,char *tr[]){
     for(int i = 0; i < MAXTR; i++){
         if(tr[i] != NULL){
             addCommand(entrada);
         }
     }                
+}
+*/
+
+
+void guardarLista(char *entrada, char *tr[]) {
+    static char *lastCommand = NULL;
+
+
+    // Guardar el comando en el historial
+    addCommand(entrada);
+
+    // Actualizar el último comando guardado
+    if (lastCommand != NULL) {
+        free(lastCommand);
+    }
+    lastCommand = strdup(entrada);
 }
 
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList){
