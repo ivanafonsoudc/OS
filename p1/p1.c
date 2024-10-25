@@ -588,6 +588,7 @@ void Cmd_reclist(char *tr[], char *cmd) {
 
 }    
 
+/*
 void guardar_entries_revlist(const char *path, int level, int show_hidden) {                                          
     DIR *dir = opendir(path);                         
     if (dir == NULL) {                          
@@ -647,8 +648,185 @@ void guardar_entries_revlist(const char *path, int level, int show_hidden) {
     }    
     
     closedir(dir);
-}  
+} 
+*/
 
+/*
+void guardar_entries_revlist(const char *path, int level, int show_hidden) {
+    DIR *dir = opendir(path);
+    if (dir == NULL) {
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    struct stat dir_stat;
+
+    // Guardar el directorio actual
+    if (lstat(path, &dir_stat) == 0 && entry_count < MAX) {
+        strncpy(entries[entry_count].path, path, MAX);
+        entries[entry_count].level = level;
+        entries[entry_count].is_dir = 1; // Marcar como directorio
+        entries[entry_count].size = dir_stat.st_size; // Tamaño del directorio
+        entry_count++;
+    }
+
+    // Guardar los archivos y subdirectorios
+    while ((entry = readdir(dir)) != NULL) {
+        if (!show_hidden && entry->d_name[0] == '.') {
+            continue;
+        }
+
+        char full_path[MAX];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+
+        struct stat path_stat;
+        if (lstat(full_path, &path_stat) == 0 && entry_count < MAX) {
+            // Evitar duplicados
+            int is_duplicate = 0;
+            for (int i = 0; i < entry_count; i++) {
+                if (strcmp(entries[i].path, full_path) == 0) {
+                    is_duplicate = 1;
+                    break;
+                }
+            }
+            if (!is_duplicate) {
+                strncpy(entries[entry_count].path, full_path, MAX);
+                entries[entry_count].level = level;
+                entries[entry_count].is_dir = S_ISDIR(path_stat.st_mode); // Marcar si es directorio
+                entries[entry_count].size = path_stat.st_size; // Guardar el tamaño del archivo
+                entry_count++;
+            }
+
+            // Si es un directorio, llamar recursivamente
+            if (S_ISDIR(path_stat.st_mode) && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+                guardar_entries_revlist(full_path, level + 1, show_hidden);
+            }
+        } else {
+            perror("lstat");
+        }
+    }
+
+    closedir(dir);
+}*/
+
+void guardar_entries_revlist(const char *path, int level, int show_hidden) {                                           
+    DIR *dir = opendir(path);                         
+    if (dir == NULL) {                          
+        perror("opendir");                           
+        return;                                           
+    }   
+                                                                 
+    struct dirent *entry;                       
+                                                            
+    // Guarda el propio directorio en entries
+    struct stat dir_stat;                                      
+    if (lstat(path, &dir_stat) == 0 && entry_count < MAX) {
+        strncpy(entries[entry_count].path, path, MAX); 
+        entries[entry_count].level = level;                       
+        entries[entry_count].is_dir = 1; // Marca como directorio
+        entries[entry_count].size = dir_stat.st_size;                                                         
+        entry_count++;
+    }     
+    // Lee el contenido del directorio         
+    while ((entry = readdir(dir)) != NULL) {                   
+        // Omite . y ..                                   
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {                                                         
+            continue;
+        }                                                   
+            
+        // Si show_hidden es 0 y el archivo es oculto, lo omite
+        if (!show_hidden && entry->d_name[0] == '.') {
+            continue;                                  
+        }                                                         
+                        
+        // Construye el path completo para la entrada             
+        char full_path[MAX];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);  
+            // Procesa la entrada
+            struct stat path_stat;                                 
+            if (lstat(full_path, &path_stat) == 0) {          
+                if (S_ISDIR(path_stat.st_mode)) {
+                    // Si es un directorio, llama recursivamente       
+                    guardar_entries_revlist(full_path, level + 1, show_hidden);                                                         
+                } else {                            
+                    // Si es un archivo, revisa si es duplicado
+                    int is_duplicate = 0;               
+                    for (int i = 0; i < entry_count; i++) {
+                        if (strcmp(entries[i].path, full_path) == 0) {
+                            is_duplicate = 1;
+                            break;                                    
+                        }
+                    }
+                    if (!is_duplicate && entry_count < MAX) {
+                    // Almacena el archivo en entries
+                    strncpy(entries[entry_count].path, full_path, MAX);                                                                
+                    entries[entry_count].level = level;   
+                    entries[entry_count].is_dir = 0; // Marca como archivo
+                    entries[entry_count].size = path_stat.st_size; 
+                    entry_count++;              
+                }                                           
+            }                    
+        } else {                                         
+            perror("lstat");                        
+        }
+    }
+                        
+    closedir(dir);                
+} 
+
+void print_entries_revlist(int long_format, int acc_time, int link_info, int show_hidden) {               
+    int printed[MAX]; // Array para marcar entradas ya impresas
+    memset(printed, 0, sizeof(printed)); // Inicializa a 0
+                 
+    // Itera en orden inverso para imprimir directorios antes de los archivos           
+    for (int i = entry_count - 1; i >= 0; i--) {
+        if (entries[i].is_dir) {                            
+            struct stat dir_stat;
+            if (lstat(entries[i].path, &dir_stat) == 0) {
+                printf("************%s\n", entries[i].path);
+
+                // Imprime archivos y subdirectorios dentro del directorio actual
+                for (int j = entry_count - 1; j >= 0; j--) {
+                    if (strncmp(entries[j].path, entries[i].path, strlen(entries[i].path)) == 0) {
+                        const char *relative_path = entries[j].path + strlen(entries[i].path) + 1;
+
+                        // Verifica que esté en el mismo nivel del directorio actual y no esté impreso
+                        if (strchr(relative_path, '/') == NULL && strcmp(entries[j].path, entries[i].path) != 0) {
+                            if (!printed[j]) {
+                                struct stat file_stat;
+                                if (lstat(entries[j].path, &file_stat) == 0) {
+                                    fileinfo(entries[j].path, &file_stat, long_format, acc_time, link_info);
+                                    printed[j] = 1; // Marca como impreso
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Imprime los directorios . y .. si show_hidden está habilitado
+                if (show_hidden) {
+                    char dot_path[MAX + 3]; // Increase buffer size to accommodate additional characters
+                    char dotdot_path[MAX + 4]; // Increase buffer size to accommodate additional characters
+                    snprintf(dot_path, sizeof(dot_path), "%s/.", entries[i].path);
+                    snprintf(dotdot_path, sizeof(dotdot_path), "%s/..", entries[i].path);
+
+                    struct stat dot_stat;
+                    struct stat dotdot_stat;
+
+                    if (lstat(dot_path, &dot_stat) == 0) {
+                        fileinfo(dot_path, &dot_stat, long_format, acc_time, link_info);
+                    }
+                    if (lstat(dotdot_path, &dotdot_stat) == 0) {
+                        fileinfo(dotdot_path, &dotdot_stat, long_format, acc_time, link_info);
+                    }
+                }
+            }
+        }
+    }
+}
+ 
+/*
 void print_entries_revlist(int long_format, int acc_time, int link_info) {          
     // Array para llevar el control de archivos ya impresos
     int printed[MAX]; // Suponiendo que MAX es la capacidad de entries
@@ -684,11 +862,11 @@ void print_entries_revlist(int long_format, int acc_time, int link_info) {
         }
     }
 }
-
+*/
 void revlist_aux(const char *path, int level, int show_hidden, int long_format, int acc_time, int link_info) {
     entry_count = 0; // Reinicia el contador de entradas
     guardar_entries_revlist(path, level, show_hidden); // Guarda las entradas del directorio y sus subdirectorios
-    print_entries_revlist(long_format, acc_time, link_info); // Imprime las entradas guardadas
+    print_entries_revlist(long_format, acc_time, link_info, show_hidden); // Imprime las entradas guardadas
 }
 
 
