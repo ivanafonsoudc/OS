@@ -934,10 +934,15 @@ void ejecutarComandoHistorico(int index, bool *terminado, char *tr[], tListP *op
 
 
 void Cmd_hist(char *tr[], char *cmd, bool *terminado, tListP *openFilesList){
-    
     if (tr[1] == NULL) {  // Sin argumentos, imprime todo el historial
          printHistory(-1);
-    }else if (tr[2] == NULL) {  // Un argumento, imprime el comando en esa posición
+    }else if(strcmp(tr[1], "-?")==0){
+        printf("historic [-c|-N|N]	Muestra (o borra)el historico de comandos\n-N: muestra los N primeros\n-c: borra el historico\nN: repite el comando N\n");
+        return;
+    }else if(strcmp(tr[1], "-c")==0){
+        clearHistory();
+
+    } else if (tr[2] == NULL) {  // Un argumento, imprime el comando en esa posición
         int n = atoi(tr[1]);
         if(n>=0){
             ejecutarComandoHistorico(n, terminado, tr, openFilesList);
@@ -1191,6 +1196,7 @@ void leerEntrada(char *cmd, char *tr[], char *entrada){
 
 void guardarLista(char *entrada, char *tr[]) {
     static char *lastCommand = NULL;
+
     // Guardar el comando en el historial
     addCommand(tr);
 
