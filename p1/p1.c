@@ -47,11 +47,12 @@ File openFiles[MAX];
 int openFilesCount = 0;
 
 typedef struct ComandNode {
-    char name[MAX];            
+    char *name;       
     struct ComandNode *next;      
 } ComandNode;
 
 ComandNode *historyList = NULL;
+int totalCommands = 0;
 
 typedef struct {
     char path[MAX];
@@ -106,18 +107,25 @@ char * ConvierteModo2 (mode_t m)
     return permisos;                                  
 } 
 
-void addCommand(char *name) {
-    ComandNode *newNode = (ComandNode *)malloc(sizeof(ComandNode)); 
-    if(newNode == NULL){
-        fprintf(stderr, "Error"); 
-        return;
-    }   
-    strncpy(newNode->name, name, MAX); 
-    newNode->next = historyList; 
-    historyList = newNode; 
-    
-}
 
+void addCommand(char *tr[]) {
+
+
+    char command[MAX] = "";
+    for (int i = 0; tr[i] != NULL; i++) {
+        strcat(command, tr[i]);
+        if (tr[i + 1] != NULL) {
+            strcat(command, " ");
+        }
+    }
+
+
+    ComandNode *newNode = (ComandNode *)malloc(sizeof(ComandNode));
+    newNode->name = strdup(command);
+    newNode->next = historyList;
+    historyList = newNode;
+    totalCommands++;
+}
 
 
 int getTotalHistCount() {
@@ -130,41 +138,25 @@ int getTotalHistCount() {
     return count;
 }
 
-
-void printHistory(int i){
+void printHistory() {
     ComandNode *current = historyList;
-    int count = 0;
-    int totalCommands = getTotalHistCount();
-    char *commands[totalCommands];
-    // Store commands in an array
-    while(current != NULL){
-        commands[count] = current->name;
+    int index = totalCommands - 1;
+    while (current != NULL) {
+        printf("%d-> %s\n", index, current->name);
         current = current->next;
-        count++;
+        index--;
     }
-
-    // Print all commands in reverse order
-    for(int j = totalCommands - 1; j >= 0; j--){
-        printf("%d-> %s\n", totalCommands - j, commands[j]);
-    }
-    
-  
 }
 
 void printLastNCommands(int n) {
-    int totalCommands = getTotalHistCount();  
     if (n > totalCommands) {
-        n = totalCommands;  
+        n = totalCommands;
     }
     ComandNode *current = historyList;
     int start = totalCommands - n;
-    for (int i = 0; i < start; i++) {
+    for (int i = totalCommands - 1; i >= start; i--) {
+        printf("%d-> %s\n", i, current->name);
         current = current->next;
-    }
-
-    for (int i = start; i < totalCommands; i++) {
-        printf("%d %s\n", i, current->name);  
-        current = current->next;   
     }
 }
 
@@ -173,10 +165,12 @@ void clearHistory(){
     ComandNode *next;
     while(current != NULL){
         next = current->next;
+        free(current->name);
         free(current);
         current = next;
     }
     historyList = NULL;
+    totalCommands = 0;
 }   
 
 int TrocearCadena(char * cadena, char * tr[]){ 
@@ -918,14 +912,35 @@ void Cmd_date(char *tr[], char *cmd){
     }
 }
 
-void Cmd_hist(char *tr[], char *cmd) {
+void ejecutarComandoHistorico(int index, bool *terminado, char *tr[], tListP *openFilesList) {
+    if (index < 0 || index >= totalCommands) {
+        printf("Error: Número de comando inválido\n");
+        return;
+    }
+
+    ComandNode *current = historyList;
+    for (int i = totalCommands - 1; i > index; i--) {
+        current = current->next;
+    }
+
+    printf("Ejecutando hist (%d): %s\n", index, current->name);
+
+    char cmd[MAX];
+    strcpy(cmd, current->name);
+    TrocearCadena(cmd, tr);
+    procesarEntrada(current->name, terminado, tr, openFilesList);
+}
+
+
+
+void Cmd_hist(char *tr[], char *cmd, bool *terminado, tListP *openFilesList){
     
     if (tr[1] == NULL) {  // Sin argumentos, imprime todo el historial
          printHistory(-1);
     }else if (tr[2] == NULL) {  // Un argumento, imprime el comando en esa posición
         int n = atoi(tr[1]);
         if(n>=0){
-            printHistory(n);
+            ejecutarComandoHistorico(n, terminado, tr, openFilesList);
         }else{
             printLastNCommands(-n); 
         }
@@ -934,7 +949,7 @@ void Cmd_hist(char *tr[], char *cmd) {
     }    
 }  
 
-void Cmd_open (char * tr[], tListP *openFilesList){                                          
+void Cmd_open (char * tr[], tListP *openFilesList){                                         
     int i,df, mode=0;      
         
     if (tr[1]==NULL) {                       
@@ -1171,23 +1186,13 @@ void leerEntrada(char *cmd, char *tr[], char *entrada){
     TrocearCadena(entrada,tr);
 }
 
-/*
-void guardarLista(char *entrada,char *tr[]){
-    for(int i = 0; i < MAXTR; i++){
-        if(tr[i] != NULL){
-            addCommand(entrada);
-        }
-    }                
-}
-*/
+
 
 
 void guardarLista(char *entrada, char *tr[]) {
     static char *lastCommand = NULL;
-
-
     // Guardar el comando en el historial
-    addCommand(entrada);
+    addCommand(tr);
 
     // Actualizar el último comando guardado
     if (lastCommand != NULL) {
@@ -1197,52 +1202,52 @@ void guardarLista(char *entrada, char *tr[]) {
 }
 
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList){
-   if(tr[0] != NULL){
-     if(strcmp(tr[0], "authors") == 0){
-       Cmd_authors(tr,cmd);
-     }else if(strcmp(tr[0], "pid") == 0){
-         Cmd_pid(tr, cmd);
-     }else if(strcmp(tr[0], "ppid") == 0){
-         Cmd_ppid(tr, cmd); 
-     }else if(strcmp(tr[0], "cd") == 0){
-         Cmd_cd(tr,cmd);
-     }else if(strcmp(tr[0], "date") == 0){
-         Cmd_date(tr,cmd);
-     }else if(strcmp(tr[0], "historic") == 0){
-         Cmd_hist(tr,cmd);
-     }else if(strcmp(tr[0], "open") == 0){
-         Cmd_open(tr, openFilesList);
-     }else if(strcmp(tr[0], "close") == 0){
-         Cmd_close(tr, openFilesList);
-     }else if(strcmp(tr[0], "dup") == 0){
-            Cmd_dup(tr, openFilesList);
-     }else if(strcmp(tr[0], "infosys") == 0){
-            Cmd_infosys(tr,cmd);
-     }else if(strcmp(tr[0], "help") == 0){
-            Cmd_help(tr,cmd);
-     }else if(strcmp(tr[0], "quit") == 0 || strcmp(tr[0], "exit") == 0 || strcmp(tr[0], "bye") == 0){  
-             Cmd_quit(terminado,tr, openFilesList);                                   
-     }else if(strcmp(tr[0], "makedir") == 0){
-            Cmd_makedir(tr);
-     }else if(strcmp(tr[0], "makefile") == 0){
-            Cmd_makefile(tr, cmd);
-     }else if(strcmp(tr[0], "listfile") == 0){
-            Cmd_listfile(tr, cmd);
-     }else if(strcmp(tr[0], "cwd") == 0){
-            Cmd_cwd();
-     }else if(strcmp(tr[0], "listdir") == 0){
-            Cmd_listdir(tr,cmd);
-     }else if(strcmp(tr[0], "erase") == 0){
-            Cmd_erase(tr,cmd);
-     }else if(strcmp(tr[0], "delrec") == 0){
-            Cmd_delrec(tr, cmd);
-     }else if(strcmp(tr[0], "revlist") == 0){
-            Cmd_revlist(tr, cmd);
-     }else if(strcmp(tr[0], "reclist") == 0){
-            Cmd_reclist(tr, cmd);
-     } else{ 
-        fprintf(stderr,"%s \n",cmd); 
-     }
+    if(tr[0] != NULL){
+        if(strcmp(tr[0], "authors") == 0){
+        Cmd_authors(tr,cmd);
+        }else if(strcmp(tr[0], "pid") == 0){
+            Cmd_pid(tr, cmd);
+        }else if(strcmp(tr[0], "ppid") == 0){
+            Cmd_ppid(tr, cmd); 
+        }else if(strcmp(tr[0], "cd") == 0){
+            Cmd_cd(tr,cmd);
+        }else if(strcmp(tr[0], "date") == 0){
+            Cmd_date(tr,cmd);
+        }else if(strcmp(tr[0], "historic") == 0){
+            Cmd_hist(tr,cmd, terminado, openFilesList);
+        }else if(strcmp(tr[0], "open") == 0){
+            Cmd_open(tr, openFilesList);
+        }else if(strcmp(tr[0], "close") == 0){
+            Cmd_close(tr, openFilesList);
+        }else if(strcmp(tr[0], "dup") == 0){
+                Cmd_dup(tr, openFilesList);
+        }else if(strcmp(tr[0], "infosys") == 0){
+                Cmd_infosys(tr,cmd);
+        }else if(strcmp(tr[0], "help") == 0){
+                Cmd_help(tr,cmd);
+        }else if(strcmp(tr[0], "quit") == 0 || strcmp(tr[0], "exit") == 0 || strcmp(tr[0], "bye") == 0){  
+                Cmd_quit(terminado,tr, openFilesList);                                   
+        }else if(strcmp(tr[0], "makedir") == 0){
+                Cmd_makedir(tr);
+        }else if(strcmp(tr[0], "makefile") == 0){
+                Cmd_makefile(tr, cmd);
+        }else if(strcmp(tr[0], "listfile") == 0){
+                Cmd_listfile(tr, cmd);
+        }else if(strcmp(tr[0], "cwd") == 0){
+                Cmd_cwd();
+        }else if(strcmp(tr[0], "listdir") == 0){
+                Cmd_listdir(tr,cmd);
+        }else if(strcmp(tr[0], "erase") == 0){
+                Cmd_erase(tr,cmd);
+        }else if(strcmp(tr[0], "delrec") == 0){
+                Cmd_delrec(tr, cmd);
+        }else if(strcmp(tr[0], "revlist") == 0){
+                Cmd_revlist(tr, cmd);
+        }else if(strcmp(tr[0], "reclist") == 0){
+                Cmd_reclist(tr, cmd);
+        } else{ 
+            fprintf(stderr,"%s \n",cmd); 
+        }
   }
 }
 
@@ -1259,7 +1264,8 @@ int main(){
         guardarLista(entrada, tr);
         procesarEntrada(cmd,&terminado, tr, &openFilesList);
         }   
-    return 0;
-        
+    clearHistory();   
+    return 0;    
 }
+
     
