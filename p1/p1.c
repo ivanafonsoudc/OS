@@ -642,34 +642,32 @@ void guardar_entries_revlist(const char *path, int level, int show_hidden) {
 }                 
 
 
-void print_entries_revlist(int long_format, int acc_time, int link_info) {                                                
+void print_entries_revlist(int long_format, int acc_time, int link_info) {          
+    // Array para llevar el control de archivos ya impresos
+    int printed[MAX]; // Suponiendo que MAX es la capacidad de entries
+    memset(printed, 0, sizeof(printed)); // Inicializa a 0
+
     // Imprimir directorios primero
-    for (int i = entry_count - 1; i >= 0; i--) {
-        if (entries[i].is_dir) {                                     
-            struct stat dir_stat;                                   
+    for (int i = entry_count - 1; i >= 0; i--) { 
+        if (entries[i].is_dir) {
+            struct stat dir_stat;
             if (lstat(entries[i].path, &dir_stat) == 0) {
                 printf("************%s\n", entries[i].path);
 
-                // Imprimir archivos del directorio actual
-                for (int j = entry_count - 1; j >= 0; j--) {
-                    if (!entries[j].is_dir) {
-                        struct stat file_stat;
-                        if (lstat(entries[j].path, &file_stat) == 0) {
-                            // Asegurarse de que el archivo pertenece al directorio actual exactamente
-                            const char *dir_prefix = entries[i].path;
-                            const char *file_path = entries[j].path;
+                // Imprimir archivos y subdirectorios del directorio actual                                                        
+                for (int j = entry_count - 1; j >= 0; j--) {          
+                    // Consideramos tanto archivos como subdirectorios
+                    if (strncmp(entries[j].path, entries[i].path, strlen(entries[i].path)) == 0) {
+                        const char *relative_path = entries[j].path + strlen(entries[i].path) + 1; // Salta el '/'
 
-                            // Comparar el prefijo del directorio con el archivo
-                            if (strncmp(file_path, dir_prefix, strlen(dir_prefix)) == 0) {
-                                // Asegurarse de que el siguiente carácter es '/' para no incluir archivos de subdirectorios
-                                if (file_path[strlen(dir_prefix)] == '/') {
-                                    // Solo imprime archivos directamente bajo este directorio
-                                    const char *relative_path = file_path + strlen(dir_prefix) + 1; // Salta el '/'
-
-                                    // Verificar que no contiene subdirectorios en el nombre restante
-                                    if (strchr(relative_path, '/') == NULL) {
-                                        fileinfo(file_path, &file_stat, long_format, acc_time, link_info);  
-                                    }
+                        // Verifica que sea un archivo o un subdirectorio en este nivel                           
+                        if (strchr(relative_path, '/') == NULL && strcmp(entries[j].path, entries[i].path) != 0) {   
+                            // Verifica si ya se imprimió
+                            if (!printed[j]) {
+                                struct stat file_stat;
+                                if (lstat(entries[j].path, &file_stat) == 0) {                              
+                                    fileinfo(entries[j].path, &file_stat, long_format, acc_time, link_info);
+                                    printed[j] = 1; // Marca como impreso                           
                                 }
                             }
                         }
@@ -1203,6 +1201,7 @@ int main(){
         guardarLista(entrada, tr);
         procesarEntrada(cmd,&terminado, tr, &openFilesList);
         }
+    clearHistory();    
     return 0;
         
 }
