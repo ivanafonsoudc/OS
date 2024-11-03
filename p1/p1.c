@@ -387,7 +387,7 @@ void Cmd_listdir(char *tr[], char *cmd) { //Función para listar directorios
             char full_path[MAX]; //Path completo
             snprintf(full_path, sizeof(full_path), "%s/%s", tr[i], entry->d_name); //Copia el path completo
 
-            struct stat file_stat; //Información del fichero
+            struct stat file_stat; //Información del fichero //corregir lstat
             if (stat(full_path, &file_stat) == 0 || (link_info && lstat(full_path, &file_stat) == 0)) { //Si se puede obtener la información del fichero
                 fileinfo(full_path, &file_stat, long_format, acc_time, link_info); //Obtiene la información del fichero
             } else {
