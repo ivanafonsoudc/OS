@@ -25,6 +25,9 @@
 #include <libgen.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
 #include "list.h"
 
 #define TAMANO 2048
@@ -72,6 +75,17 @@ void freeEntries() { // Función para liberar las entradas de directorios
     entry_count = 0;
 }   
 
+typedef struct MemoryBlock{
+    void *address;
+    size_t size;
+    char type[10]; // malloc, mmap, shared
+    key_t key; //para shared memory
+    int fd; //para mmap
+    struct MemoryBlock *next;
+}MemoryBlock;
+
+MemoryBlock *memoryList = NULL; // Lista de bloques de memoria
+
 
 char LetraTF (mode_t m){
      switch (m&S_IFMT) { /*and bit a bit con los bits de formato,0170000 */
@@ -111,6 +125,29 @@ char * ConvierteModo3 (mode_t m)
     return permisos;
 }  
 
+void ImprimirListaMmap(MemoryBlock *memoryList){
+    MemoryBlock *current = memoryList;
+    while(current != NULL){
+        printf("Address: %p, Size: %lu, Type: %s, File Descriptor: %d\n", current->address, current->size, current->type, current->fd);
+        current = current->next;
+    }
+}
+
+void ImprimirListaShared(){
+    MemoryBlock *current = memoryList;
+    while(current != NULL){
+        printf("Address: %p, Size: %lu, Type: %s, Key: %d\n", current->address, current->size, current->type, current->key);
+        current = current->next;
+    }
+}
+
+// Función para convertir una cadena a un puntero
+void *cadtop(const char *str) {
+    void *ptr = NULL;
+    sscanf(str, "%p", &ptr);
+    return ptr;
+}
+
 void Recursiva (int n){
   char automatico[TAMANO];
   static char estatico[TAMANO];
@@ -137,9 +174,9 @@ void * ObtenerMemoriaShmget (key_t clave, size_t tam)
     int aux,id,flags=0777;
     struct shmid_ds s;
 
-    if (tam)     /*tam distito de 0 indica crear */
-        flags=flags | IPC_CREAT | IPC_EXCL; /*cuando no es crear pasamos de tamano 0*/
-    if (clave==IPC_PRIVATE)  /*no nos vale*/
+    if (tam)     //tam distito de 0 indica crear 
+        flags=flags | IPC_CREAT | IPC_EXCL; //cuando no es crear pasamos de tamano 0
+    if (clave==IPC_PRIVATE)  //no nos vale
         {errno=EINVAL; return NULL;}
     if ((id=shmget(clave, tam, flags))==-1)
         return (NULL);
@@ -150,8 +187,8 @@ void * ObtenerMemoriaShmget (key_t clave, size_t tam)
         errno=aux;
         return (NULL);
     }
-    shmctl (id,IPC_STAT,&s); /* si no es crear, necesitamos el tamano, que es s.shm_segsz*/
- /* Guardar en la lista   InsertarNodoShared (&L, p, s.shm_segsz, clave); */
+    shmctl (id,IPC_STAT,&s); // si no es crear, necesitamos el tamano, que es s.shm_segsz
+ //Guardar en la lista   InsertarNodoShared (&L, p, s.shm_segsz, clave); 
     return (p);
 }
 
@@ -162,7 +199,7 @@ void do_AllocateCreateshared (char *tr[])
    void *p;
 
    if (tr[0]==NULL || tr[1]==NULL) {
-                ImprimirListaShared(&L);
+                ImprimirListaShared(&memoryList);
                 return;
    }
   
@@ -186,7 +223,7 @@ void do_AllocateShared (char *tr[])
    void *p;
 
    if (tr[0]==NULL) {
-                ImprimirListaShared(&L);
+                ImprimirListaShared(&memoryList);
                 return;
    }
   
@@ -211,8 +248,8 @@ void * MapearFichero (char * fichero, int protection)
           return NULL;
     if ((p=mmap (NULL,s.st_size, protection,map,df,0))==MAP_FAILED)
            return NULL;
-/* Guardar en la lista    InsertarNodoMmap (&L,p, s.st_size,df,fichero); */
-/* Gurdas en la lista de descriptores usados df, fichero*/
+// Guardar en la lista    InsertarNodoMmap (&L,p, s.st_size,df,fichero); 
+// Gurdas en la lista de descriptores usados df, fichero
     return p;
 }
 
@@ -223,7 +260,7 @@ void do_AllocateMmap(char *arg[])
      int protection=0;
      
      if (arg[0]==NULL)
-            {ImprimirListaMmap(&L); return;}
+            {ImprimirListaMmap(memoryList); return;}
      if ((perm=arg[1])!=NULL && strlen(perm)<4) {
             if (strchr(perm,'r')!=NULL) protection|=PROT_READ;
             if (strchr(perm,'w')!=NULL) protection|=PROT_WRITE;
@@ -262,7 +299,7 @@ ssize_t LeerFichero (char *f, void *p, size_t cont)
 
    if (stat (f,&s)==-1 || (df=open(f,O_RDONLY))==-1)
         return -1;     
-   if (cont==-1)   /* si pasamos -1 como bytes a leer lo leemos entero*/
+   if (cont==-1)   // si pasamos -1 como bytes a leer lo leemos entero
         cont=s.st_size;
    if ((n=read(df,p,cont))==-1){
         aux=errno;
@@ -277,13 +314,13 @@ ssize_t LeerFichero (char *f, void *p, size_t cont)
 void Cmd_ReadFile (char *ar[])
 {
    void *p;
-   size_t cont=-1;  /*si no pasamos tamano se lee entero */
+   size_t cont=-1;  //si no pasamos tamano se lee entero 
    ssize_t n;
    if (ar[0]==NULL || ar[1]==NULL){
         printf ("faltan parametros\n");
         return;
    }
-   p=cadtop(ar[1]);  /*convertimos de cadena a puntero*/
+   p=cadtop(ar[1]);  //convertimos de cadena a puntero
    if (ar[2]!=NULL)
         cont=(size_t) atoll(ar[2]);
 
@@ -293,8 +330,8 @@ void Cmd_ReadFile (char *ar[])
         printf ("leidos %lld bytes de %s en %p\n",(long long) n,ar[0],p);
 }
 
-void Do_pmap (void) /*sin argumentos*/
- { pid_t pid;       /*hace el pmap (o equivalente) del proceso actual*/   
+void Do_pmap (void) //sin argumentos
+ { pid_t pid;       //hace el pmap (o equivalente) del proceso actual  
    char elpid[32];
    char *argv[4]={"pmap",elpid,NULL};   
                          
@@ -308,15 +345,15 @@ void Do_pmap (void) /*sin argumentos*/
          perror("cannot execute pmap (linux, solaris)");
          
       argv[0]="procstat"; argv[1]="vm"; argv[2]=elpid; argv[3]=NULL;    
-      if (execvp(argv[0],argv)==-1)/*No hay pmap, probamos procstat FreeBSD */
+      if (execvp(argv[0],argv)==-1)//No hay pmap, probamos procstat FreeBSD 
          perror("cannot execute procstat (FreeBSD)");  
             
       argv[0]="procmap",argv[1]=elpid;argv[2]=NULL;    
-            if (execvp(argv[0],argv)==-1)  /*probamos procmap OpenBSD*/ 
+            if (execvp(argv[0],argv)==-1)  //probamos procmap OpenBSD 
          perror("cannot execute procmap (OpenBSD)");
          
       argv[0]="vmmap"; argv[1]="-interleave"; argv[2]=elpid;argv[3]=NULL;                                                     
-      if (execvp(argv[0],argv)==-1) /*probamos vmmap Mac-OS*/
+      if (execvp(argv[0],argv)==-1) //probamos vmmap Mac-OS
          perror("cannot execute vmmap (Mac-OS)");      
       exit(1);         
   }
@@ -1237,6 +1274,130 @@ void Cmd_infosys(char *tr[], char *cmd){ //Función para mostrar información de
     }
 }
 
+//-malloc n .Allocates a block of malloc memory of size n bytes. Updates the list of memory blocks
+//-mmap file perm. Maps a fille to memory with permissions perm. Updates the list of memory blocks
+//-create shared cl n. Creates a block of shared memory with key cl and size n and attaches it to the process address space.Updates the list of memory blocks
+//-shared cl Attaches block a shared memory to the process address space (the block must be already created but not necessarily attached to the process space). Updates the list of memory blocks
+void Cmd_allocate(char *tr[]) {
+    if (tr[1] == NULL) {
+        printf("allocate [-malloc|-mmap|-create|-shared] n\n");
+        printf("    -malloc n: Allocates a block of malloc memory of size n bytes. Updates the list of memory blocks\n");
+        printf("    -mmap file perm: Maps a fille to memory with permissions perm. Updates the list of memory blocks\n");
+        printf("    -create shared cl n: Creates a block of shared memory with key cl and size n and attaches it to the process address space.Updates the list of memory blocks\n");
+        printf("    -shared cl: Attaches block a shared memory to the process address space (the block must be already created but not necessarily attached to the process space). Updates the list of memory blocks\n");
+        return;
+    }
+
+    if (strcmp(tr[1], "-malloc") == 0) {
+        if (tr[2] == NULL) {
+            printf("allocate -malloc n\n");
+            return;
+        }
+        int n = atoi(tr[2]);
+        if (n <= 0) {
+            printf("Error: n must be greater than 0\n");
+            return;
+        }
+        void *ptr = malloc(n);
+        if (ptr == NULL) {
+            perror("malloc");
+            return;
+        }
+        printf("%d bytes allocated in: %p\n",n, ptr);
+    } else if (strcmp(tr[1], "-mmap") == 0) {
+        if (tr[2] == NULL || tr[3] == NULL) {
+            printf("allocate -mmap file perm\n");
+            return;
+        }
+        int fd = open(tr[2], O_RDWR);
+        if (fd == -1) {
+            perror("open");
+            return;
+        }
+        int perm = atoi(tr[3]);
+        void *ptr = mmap(NULL, sizeof(fd), perm, MAP_SHARED, fd, 0);
+        if (ptr == MAP_FAILED) {
+            perror("mmap");
+            return;
+        }
+        printf("Memory mapped: %p\n", ptr);
+    } else if (strcmp(tr[1], "-createshared") == 0) {
+        if (tr[2] == NULL || tr[3] == NULL) {
+            printf("allocate -create shared cl n\n");
+            return;
+        }
+        int cl = atoi(tr[2]);
+        int n = atoi(tr[3]);
+        int shmid = shmget(cl, n, IPC_CREAT | 0666);
+        if (shmid == -1) {
+            perror("shmget");
+            return;
+        }
+        void *ptr = shmat(shmid, NULL, 0);
+        if (ptr == (void *) -1) {
+            perror("shmat");
+            return;
+        }
+        printf("Shared memory created: %p\n", ptr);
+    } else if (strcmp(tr[1], "-shared") == 0) {
+        if (tr[2] == NULL) {
+            printf("allocate -shared cl\n");
+            return;
+        }
+        int cl = atoi(tr[2]);
+        int shmid = shmget(cl, 0, 0666);
+        if (shmid == -1) {
+            perror("shmget");
+            return;
+        }
+        void *ptr = shmat(shmid, NULL, 0);
+        if (ptr == (void *) -1) {
+            perror("shmat");
+            return;
+        }
+        printf("Shared memory attached: %p\n", ptr);
+    } else {
+        printf("Error: Invalid option\n");
+    }
+}
+
+void Cmd_deallocate(){
+
+}
+
+void Cmd_memfill(){
+
+}
+
+void Cmd_memdump(){
+
+}
+
+void Cmd_memory(){
+
+}
+
+void Cmd_readfile(){
+
+}
+
+void Cmd_writefile(){
+
+}
+
+void Cmd_write(){
+
+}
+
+void Cmd_read(){
+
+}
+
+void Cmd_recurse(){
+
+}
+
+
 void Cmd_help(char *tr[], char *cmd){ //Función para mostrar ayuda sobre los comandos
     if (tr[1] == NULL || strcmp(tr[1], "-?") == 0) {
         printf("help [cmd|-lt|-T|-all]    Muestra ayuda sobre los comandos\n");
@@ -1433,6 +1594,8 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
                 Cmd_revlist(tr, cmd);
         }else if(strcmp(tr[0], "reclist") == 0){
                 Cmd_reclist(tr, cmd);
+        }else if(strcmp(tr[0], "allocate") == 0){
+                Cmd_allocate(tr);
         } else{ 
             fprintf(stderr,"%s \n",cmd); 
         }
