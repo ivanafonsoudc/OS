@@ -148,6 +148,18 @@ void *cadtop(const char *str) {
     return ptr;
 }
 
+MemoryBlock *buscarMallocBlock(size_t tam){
+    MemoryBlock *actual=memoryList;
+
+    while(actual!=NULL){
+        if(actual->size==tam && strcmp(actual->type,"malloc")==0){
+            return actual;
+        }
+        actual=actual->next;
+    }
+    return NULL;
+}
+
 void Recursiva (int n){
   char automatico[TAMANO];
   static char estatico[TAMANO];
@@ -535,12 +547,12 @@ void Cmd_makedir(char *tr[]) { //Función para crear un directorio
 //makefile, crea un fichero con el nombre que se le pase
 void Cmd_makefile(char *tr[], char *cmd){ //Función para crear un fichero
     if(tr[1] != NULL && tr[2] == NULL){ //Si el fichero no es nulo y el segundo argumento es nulo
-        int fd = open(tr[1], O_CREAT | O_WRONLY, 0644); //Abre el fichero
-        if(fd == -1){ //Si el descriptor de fichero es -1
-            perror("open"); //Imprime el error
+        FILE *file = fopen(tr[1], "w"); //Abre el fichero
+        if(file == NULL){ //Si el fichero es nulo
+            perror("fopen"); //Imprime el error
         }else{
-            printf("File %s created with descriptor %d\n", tr[1], fd); //Sino, imprime que el fichero se ha creado con el descriptor de fichero
-            AnadirFicherosAbiertos(fd, tr[1], O_CREAT | O_WRONLY); //Añade el fichero a los ficheros abiertos
+            printf("File %s created\n", tr[1]); //Sino, imprime que el fichero se ha creado
+            fclose(file); //Cierra el fichero
         }
     }else{
         fprintf(stderr,"%s \n",cmd);
@@ -1321,6 +1333,7 @@ void Cmd_allocate(char *tr[]) {
             return;
         }
         printf("Memory mapped: %p\n", ptr);
+    
     } else if (strcmp(tr[1], "-createshared") == 0) {
         if (tr[2] == NULL || tr[3] == NULL) {
             printf("allocate -create shared cl n\n");
@@ -1361,12 +1374,245 @@ void Cmd_allocate(char *tr[]) {
     }
 }
 
-void Cmd_deallocate(){
 
+void deallocate_malloc(void *address){  
+    MemoryBlock *actual = memoryList; //Recorre la lista de bloques 
+    MemoryBlock *previo = NULL; //Apunta al bloque anterior        
+        
+    while(actual!=NULL){ //Siempre que el bloque no sea nulo       
+        if(actual->address==address && strcmp(actual->type, "malloc")==0){ //El bloque actual coincide con la dirección y es de tipo malloc
+            free(actual->address); //Libera el bloque de memoria
+            printf("Bloque de memoria liberado %p", address); 
+                                                                   
+            if(previo==NULL){
+                memoryList=actual->next; //Actualiza el inicio de la lista                                                                 
+            }else{                                             
+                previo->next=actual->next; //Enlaza el bloque anterior con el siguiente                                                    
+            }
+
+            free(actual); //Libera el struct MemoryBlock del bloque que se eliminó                                                          
+            return;                                        
+        }                                           
+    //Avanza a la posición siguiente de la lista                   
+    previo=actual;                                         
+    actual=actual->next;                             
+    }                                                        
+    printf("No hay bloque de ese tamaño asignado con malloc");
+}  
+void deallocate_mmap(void *address){                       
+    MemoryBlock *actual = memoryList; //Recorre la lista de bloques
+    MemoryBlock *previo = NULL; //Apunta al bloque anterior    
+                
+    while(actual!=NULL){ //Siempre que el bloque no sea nulo       
+        if(actual->address==address && strcmp(actual->type, "mmap")==0){ //El bloque actual coincide con la dirección y es de tipo mmap
+            if(munmap(actual->address, actual->size)==-1){ //Desmapea la memoria 
+perror("Error al desmapear la memoria");           
+                return;                                    
+            }                                                      
+            if(close(actual->fd)==-1){ //Cierra el archivo             
+                perror("Error al cerrar el archivo");
+                return;                                        
+            }         
+            printf("Fichero mapeado en %p",address);               
+            //Actualizar memoryList                                
+            if(previo==NULL){                              
+                memoryList=actual->next;
+            }else{                                             
+                previo->next=actual->next;
+            }                                                      
+            
+            free(actual); //Libera el struct MemoryBlock del bloque que se eliminó                  
+            return;                                                 
+        }                                                  
+        //Avanza a la posición siguiente de la lista
+        previo=actual;                                             
+        actual=actual->next;                               
+    }                        
+    printf("Imposible mapear fichero: Invalid argument");    
+}      
+void deallocate_shared(void *address){                             
+    MemoryBlock *actual = memoryList; //Recorre la lista de bloques
+    MemoryBlock *previo = NULL; //Apunta al bloque anterior
+                
+    while(actual!=NULL){ //Siempre que el bloque no sea nulo   
+        if(actual->address==address && strcmp(actual->type, "shared")==0){ //El bloque actual coincide con la dirección y es de tipo shared
+            if(shmdt(actual->address)==-1){//Desacopla el bloque de memoria. La función shmdt se encarga de desacoplar el segmento de memoria compartida    
+   perror("Error al desacoplar la memoria compartida");
+            }                                                      
+                                                           
+            printf("Memoria desacoplada %p",address);              
+            //Actualizar memoryList                                    
+            if(previo==NULL){
+                    memoryList=actual->next;                   
+                }else{
+                    previo->next=actual->next;                     
+                }
+
+                free(actual); //Libera el struct MemoryBlock del bloque que se eliminó                                                 
+                return;                                          
+        }                                        
+        //Avanza a la posición siguiente de la lista
+        previo=actual;
+        actual=actual->next;
+    }                                                              
+}
+void deallocate_delkey(void *address){                     
+    MemoryBlock *actual = memoryList; //Recorre la lista de bloques
+    MemoryBlock *previo = NULL; //Apunta al bloque anterior            
+                    
+    while (actual!=NULL){ //Siempre que el bloque no sea nulo  
+        if(actual->address==address && strcmp(actual->type, "delkey")==0){ //El bloque actual coincide con la dirección y es de tipo delkey
+            if(shmctl(actual->key, IPC_RMID,NULL)==-1){ //Elimina el bloque de memoria compartida. La función shmctl obtiene la información para eliminarla. IPC_RMID elimina el bloque que memoria compartida
+                perror("Error al eliminar el bloque de memoria");    
+                return;                                        
+            }                                                    
+                                                 
+            printf("Clave %d con dirección %p eliminada",actual->key,address);  
+//Actualizar memoryList                                
+            if(previo==NULL){                              
+                    memoryList=actual->next;
+                }else{                                                 
+                    previo->next=actual->next;
+                }                                              
+
+                free(actual); //Libera el struct MemoryBlock del bloque que se eliminó                                                   
+                return;                                            
+        }                                      
+        //Avanza a la posición siguiente de la lista                 
+        previo=actual;                                         
+        actual=actual->next;                                     
+    }                                            
+}   
+void deallocate_addr(void *address){
+    MemoryBlock *actual = memoryList; //Recorre la lista de bloques
+    MemoryBlock *previo = NULL; //Apunta al bloque anterior
+                
+    while(actual!=NULL){ //Siempre que el bloque no sea nulo           
+        if(actual->address==address && strcmp(actual->type, "addr")==0){ //El bloque actual coincide con la dirección y es de tipo addr
+            if(strcmp(actual->type,"malloc")==0){              
+                free(actual->address);
+                printf("Malloc: memoria liberada en %p",address);
+            }                                                      
+            if(strcmp(actual->type,"mmap")==0){
+                free(actual->address);                               
+                printf("Mmap: memoria liberada en %p",address);
+            }                                                    
+            if(strcmp(actual->type,"shared")==0){
+                free(actual->address);
+                printf("Shared: memoria liberada en %p",address);
+            }  
+if(strcmp(actual->type,"delkey")==0){
+                free(actual->address);     
+                printf("Delkey: memoria liberada en %p",address);  
+            }                                                          
+            if(strcmp(actual->type,"addr")==0){                      
+                free(actual->address);  
+                printf("Addr: memoria liberada en %p",address);
+            }                              
+    
+            //Actualizar memoryList
+            if(previo==NULL){                                      
+                    memoryList=actual->next;                         
+                }else{    
+                    previo->next=actual->next;                   
+                }           
+    
+                free(actual); //Libera el struct MemoryBlock del bloque que se eliminó                         
+                return;
+        }                                  
+        //Avanza a la posición siguiente de la lista                   
+        previo=actual;                               
+        actual=actual->next;                                         
+    }                                                                
+}  
+
+void Cmd_deallocate(char *tr[], char *cmd){
+    for(int i=0;tr[i]!=NULL;i++){                                  
+        if(strcmp(tr[i],"-?")==0){ //Imprime la ayuda                  
+            printf("deallocate [-malloc|-shared|-delkey|-mmap|addr].. Desasigna un bloque de memoria\n");     
+            printf("-malloc tam: desasigna el bloque malloc de tamano tam\n");            
+            printf("-shared cl: desasigna (desmapea) el bloque de memoria compartida de clave cl\n");
+            printf("-delkey cl: elimina del sistema (sin desmapear) la clave de memoria cl\n");                                            
+            printf("-mmap fich: desmapea el fichero mapeado fich\n");
+            printf("addr: desasigna el bloque de memoria en la direccion addr\n");                                                       
+            return;
+        }  
+        if(strcmp(tr[i],"-malloc")==0){
+            size_t tam=(size_t)strtoul(tr[i+1],NULL,10); //Convierte el tamaño a un numero, con la funcion strtoul                         
+            void *addr=buscarMallocBlock(tam); //Busca el bloque malloc
+            if(addr!=NULL){                                      
+                deallocate_malloc(addr);
+                printf("Bloque malloc de tamaño %lu liberado\n",tam); 
+            }else{
+                printf("No se encontro el bloque de tamaño %lu\n",tam);
+            }
+            return;                      
+        }                                                          
+            
+        if(strcmp(tr[i],"-mmap")==0){                        
+            char *filename=tr[i+1];                              
+            void *addr=buscarMallocBlock(*filename); //Buscar el bloque malloc                                                                
+            if(addr!=NULL){
+                deallocate_mmap(addr);
+                printf("Fichero %s designado\n",filename);
+            }else{                     
+                printf("No se encontro el mapeo de %s\n",filename);
+            }                            
+            return;                             
+        } 
+        if(strcmp(tr[i],"-shared")==0){
+            key_t clave=(key_t)strtoul(tr[i+1],NULL,10); //Convierte la clave a un numero, con la funcion strtoul
+            MemoryBlock *bloqueENcontrado=buscarMallocBlock(clave);
+            if(bloqueENcontrado!=NULL){
+                deallocate_shared(bloqueENcontrado->address);
+                printf("Bloque de memoria %d desasignado",clave);
+            }else{
+                printf("No se encontro el bloque con clave %d",clave);
+            }
+            return;
+        }
+        if(strcmp(tr[i],"-delkey")==0){
+            key_t clave=(key_t)strtoul(tr[i+1],NULL,10); //Convierte la clave a un numero, con la funcion strtoul
+            int res=shmctl(clave,IPC_RMID,NULL);
+            if(res==-1){
+                perror("Error al eliminar la clave");
+            }else{
+                printf("Clave %d eliminada",clave);
+            }
+        }
+        if(strcmp(tr[i],"addr")==0){
+            void *addr=(void *)strtoul(tr[i+1],NULL,16);
+                if(addr!=NULL){
+                    deallocate_addr(addr);
+                    printf("Bloque %p desasignado",addr);
+                }else{
+                    printf("Direccion %p invalida",addr);
+                }
+                return;
+            }    
+        printf("Comando invalido");
+    }
 }
 
-void Cmd_memfill(){
 
+
+void Cmd_memfill(char *tr[], char *cmd) { // Función para llenar la memoria con un carácter
+    if (tr[1] == NULL || tr[2] == NULL || tr[3] == NULL) { // Si faltan argumentos
+        printf("Usage: memfill addr cont ch\n"); // Imprime el uso correcto
+        return;
+    }
+
+    void *addr = (void *)strtoul(tr[1], NULL, 16); // Convierte la dirección a un número
+    size_t cont = (size_t)strtoul(tr[2], NULL, 10); // Convierte el tamaño a un número
+    unsigned char ch = (unsigned char)strtoul(tr[3], NULL, 10); // Convierte el carácter a un número
+
+    if (addr == NULL) { // Si la dirección es nula
+        printf("Invalid address\n"); // Imprime que la dirección es inválida
+        return;
+    }
+
+    LlenarMemoria(addr, cont, ch); // Llena la memoria con el carácter
+    printf("Memory filled at %p with %zu bytes of %c\n", addr, cont, ch); // Imprime que la memoria se ha llenado
 }
 
 void Cmd_memdump(){
@@ -1596,7 +1842,11 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
                 Cmd_reclist(tr, cmd);
         }else if(strcmp(tr[0], "allocate") == 0){
                 Cmd_allocate(tr);
-        } else{ 
+        }else if(strcmp(tr[0], "deallocate") == 0){
+                Cmd_deallocate(tr, cmd);       
+        }else if(strcmp(tr[0], "memfill") == 0){
+                Cmd_memfill(tr, cmd);
+        }else{ 
             fprintf(stderr,"%s \n",cmd); 
         }
   }
