@@ -28,6 +28,7 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <sys/shm.h>
+#include <ctype.h>
 #include "list.h"
 
 #define TAMANO 2048
@@ -1615,28 +1616,224 @@ void Cmd_memfill(char *tr[], char *cmd) { // Función para llenar la memoria con
     printf("Memory filled at %p with %zu bytes of %c\n", addr, cont, ch); // Imprime que la memoria se ha llenado
 }
 
-void Cmd_memdump(){
+void Cmd_memdump(char *tr[], char *cmd) { // Función para volcar la memoria
+    if (tr[1] == NULL || tr[2] == NULL) { // Si faltan argumentos
+        printf("Usage: memdump addr cont\n"); // Imprime el uso correcto
+        return;
+    }
 
+    void *addr = (void *)strtoul(tr[1], NULL, 16); // Convierte la dirección a un número
+    size_t cont = (size_t)strtoul(tr[2], NULL, 10); // Convierte el tamaño a un número
+
+    if (addr == NULL) { // Si la dirección es nula
+        printf("Invalid address\n"); // Imprime que la dirección es inválida
+        return;
+    }
+
+    unsigned char *p = (unsigned char *)addr; // Puntero a la dirección
+    for (size_t i = 0; i < cont; i++) { // Recorre la memoria
+        if (i % 16 == 0) { // Cada 16 bytes
+            printf("\n%p: ", p + i); // Imprime la dirección
+        }
+        printf("%02x ", p[i]); // Imprime el byte en hexadecimal
+        if (i % 16 == 15 || i == cont - 1) { // Cada 16 bytes o al final
+            for (size_t j = i % 16; j < 15; j++) { // Rellena con espacios
+                printf("   ");
+            }
+            printf(" | ");
+            for (size_t j = i - i % 16; j <= i; j++) { // Imprime los caracteres
+                if (isprint(p[j])) { // Si es imprimible
+                    printf("%c", p[j]); // Imprime el carácter
+                } else {
+                    printf("."); // Imprime un punto
+                }
+            }
+        }
+    }
+    printf("\n"); // Nueva línea al final
 }
 
-void Cmd_memory(){
+void Cmd_memory(char *tr[], char *cmd) { // Función para mostrar información de la memoria
+    if (tr[1] == NULL || strcmp(tr[1], "-?") == 0) {
+        printf("memory [-funcs|-vars|-blocks|-all|-pmap]    Muestra información de la memoria\n");
+        printf("    -funcs: Prints the addresses of 3 program functions and 3 library functions\n");
+        printf("    -vars: Prints the addresses of 3 external, 3 external initialized, 3 static, 3 static initialized and 3 automatic variables\n");
+        printf("    -blocks: Prints the list of allocated blocks\n");
+        printf("    -all: Prints all of the above (-funcs, -vars and -blocks)\n");
+        printf("    -pmap: Shows the output of the command pmap for the shell process (vmmap en macos)\n");
+        return;
+    }
 
+    if (strcmp(tr[1], "-funcs") == 0 || strcmp(tr[1], "-all") == 0) {
+        // Direcciones de 3 funciones del programa
+        printf("Program functions:\n");
+        printf("  Cmd_memory: %p\n", Cmd_memory);
+        printf("  Cmd_authors: %p\n", Cmd_authors);
+        printf("  Cmd_pid: %p\n", Cmd_pid);
+
+        // Direcciones de 3 funciones de la biblioteca
+        printf("Library functions:\n");
+        printf("  printf: %p\n", printf);
+        printf("  malloc: %p\n", malloc);
+        printf("  free: %p\n", free);
+    }
+
+    if (strcmp(tr[1], "-vars") == 0 || strcmp(tr[1], "-all") == 0) {
+        // Variables externas
+        extern int max_depth;
+        extern char *history[MAXH];
+        extern int history_count;
+        printf("External variables:\n");
+        printf("  max_depth: %p\n", &max_depth);
+        printf("  history: %p\n", &history);
+        printf("  history_count: %p\n", &history_count);
+
+        // Variables externas inicializadas
+        extern int openFilesCount;
+        extern File openFiles[MAX];
+        extern ComandNode *historyList;
+        printf("External initialized variables:\n");
+        printf("  openFilesCount: %p\n", &openFilesCount);
+        printf("  openFiles: %p\n", &openFiles);
+        printf("  historyList: %p\n", &historyList);
+
+        // Variables estáticas
+        static int static_var1;
+        static int static_var2;
+        static int static_var3;
+        printf("Static variables:\n");
+        printf("  static_var1: %p\n", &static_var1);
+        printf("  static_var2: %p\n", &static_var2);
+        printf("  static_var3: %p\n", &static_var3);
+
+        // Variables estáticas inicializadas
+        static int static_init_var1 = 1;
+        static int static_init_var2 = 2;
+        static int static_init_var3 = 3;
+        printf("Static initialized variables:\n");
+        printf("  static_init_var1: %p\n", &static_init_var1);
+        printf("  static_init_var2: %p\n", &static_init_var2);
+        printf("  static_init_var3: %p\n", &static_init_var3);
+
+        // Variables automáticas
+        int auto_var1;
+        int auto_var2;
+        int auto_var3;
+        printf("Automatic variables:\n");
+        printf("  auto_var1: %p\n", &auto_var1);
+        printf("  auto_var2: %p\n", &auto_var2);
+        printf("  auto_var3: %p\n", &auto_var3);
+    }
+
+    if (strcmp(tr[1], "-blocks") == 0 || strcmp(tr[1], "-all") == 0) {
+        printf("Allocated blocks:\n");
+        ImprimirListaMmap(memoryList);
+        ImprimirListaShared();
+    }
+
+    if (strcmp(tr[1], "-pmap") == 0) {
+        Do_pmap();
+    }
 }
 
-void Cmd_readfile(){
+void Cmd_readfile(char *tr[], char *cmd) { // Función para leer un archivo
+    if (tr[1] == NULL || tr[2] == NULL || tr[3] == NULL) { // Si faltan argumentos
+        printf("Usage: readfile file addr cont\n"); // Imprime el uso correcto
+        return;
+    }
 
+    char *file = tr[1]; // Nombre del archivo
+    void *addr = (void *)strtoul(tr[2], NULL, 16); // Convierte la dirección a un número
+    size_t cont = (size_t)strtoul(tr[3], NULL, 10); // Convierte el tamaño a un número
+
+    if (addr == NULL) { // Si la dirección es nula
+        printf("Invalid address\n"); // Imprime que la dirección es inválida
+        return;
+    }
+
+    ssize_t bytes_read = LeerFichero(file, addr, cont); // Lee el archivo
+    if (bytes_read == -1) { // Si hay un error al leer el archivo
+        perror("Error reading file"); // Imprime el error
+    } else {
+        printf("Read %ld bytes from %s into %p\n", bytes_read, file, addr); // Imprime que se ha leído el archivo
+    }
 }
 
-void Cmd_writefile(){
+void Cmd_writefile(char *tr[], char *cmd) { // Función para escribir en un archivo
+    if (tr[1] == NULL || tr[2] == NULL || tr[3] == NULL) { // Si faltan argumentos
+        printf("Usage: writefile file addr cont\n"); // Imprime el uso correcto
+        return;
+    }
 
+    char *file = tr[1]; // Nombre del archivo
+    void *addr = (void *)strtoul(tr[2], NULL, 16); // Convierte la dirección a un número
+    size_t cont = (size_t)strtoul(tr[3], NULL, 10); // Convierte el tamaño a un número
+
+    if (addr == NULL) { // Si la dirección es nula
+        printf("Invalid address\n"); // Imprime que la dirección es inválida
+        return;
+    }
+
+    int fd = open(file, O_WRONLY | O_CREAT, 0666); // Abre el archivo para escritura
+    if (fd == -1) { // Si hay un error al abrir el archivo
+        perror("Error opening file"); // Imprime el error
+        return;
+    }
+
+    ssize_t bytes_written = write(fd, addr, cont); // Escribe en el archivo
+    if (bytes_written == -1) { // Si hay un error al escribir en el archivo
+        perror("Error writing to file"); // Imprime el error
+    } else {
+        printf("Written %ld bytes to %s from %p\n", bytes_written, file, addr); // Imprime que se ha escrito en el archivo
+    }
+
+    close(fd); // Cierra el archivo
 }
 
-void Cmd_write(){
+void Cmd_write(char *tr[], char *cmd) { // Función para escribir en un archivo usando un descriptor de fichero
+    if (tr[1] == NULL || tr[2] == NULL || tr[3] == NULL) { // Si faltan argumentos
+        printf("Usage: write df addr cont\n"); // Imprime el uso correcto
+        return;
+    }
 
+    int df = atoi(tr[1]); // Convierte el descriptor de fichero a un número
+    void *addr = (void *)strtoul(tr[2], NULL, 16); // Convierte la dirección a un número
+    size_t cont = (size_t)strtoul(tr[3], NULL, 10); // Convierte el tamaño a un número
+
+    if (addr == NULL) { // Si la dirección es nula
+        printf("Invalid address\n"); // Imprime que la dirección es inválida
+        return;
+    }
+
+    ssize_t bytes_written = write(df, addr, cont); // Escribe en el archivo
+    if (bytes_written == -1) { // Si hay un error al escribir en el archivo
+        perror("Error writing to file"); // Imprime el error
+    } else {
+        printf("Written %ld bytes to descriptor %d from %p\n", bytes_written, df, addr); // Imprime que se ha escrito en el archivo
+    }
 }
 
-void Cmd_read(){
+void Cmd_read(char *tr[], char *cmd) { // Función para leer un archivo usando un descriptor de fichero
+    if (tr[1] == NULL || tr[2] == NULL || tr[3] == NULL) { // Si faltan argumentos
+        printf("Usage: read df addr cont\n"); // Imprime el uso correcto
+        return;
+    }
 
+    int df = atoi(tr[1]); // Convierte el descriptor de fichero a un número
+    void *addr = (void *)strtoul(tr[2], NULL, 16); // Convierte la dirección a un número
+    size_t cont = (size_t)strtoul(tr[3], NULL, 10); // Convierte el tamaño a un número
+
+    if (addr == NULL) { // Si la dirección es nula
+        printf("Invalid address\n"); // Imprime que la dirección es inválida
+        return;
+    }
+
+    ssize_t bytes_read = read(df, addr, cont); // Lee el archivo
+    if (bytes_read == -1) { // Si hay un error al leer el archivo
+        perror("Error reading file"); // Imprime el error
+    } else {
+        printf("Read %ld bytes from descriptor %d into %p\n", bytes_read, df, addr); // Imprime que se ha leído el archivo
+    }
 }
 
 void Cmd_recurse(){
@@ -1846,6 +2043,10 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
                 Cmd_deallocate(tr, cmd);       
         }else if(strcmp(tr[0], "memfill") == 0){
                 Cmd_memfill(tr, cmd);
+        }else if(strcmp(tr[0], "memdump") == 0){
+                Cmd_memdump(tr, cmd);
+        }else if(strcmp(tr[0], "memory") == 0){
+                Cmd_memory(tr, cmd);        
         }else{ 
             fprintf(stderr,"%s \n",cmd); 
         }
