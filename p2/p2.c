@@ -82,6 +82,7 @@ typedef struct MemoryBlock{
     char type[10]; // malloc, mmap, shared
     key_t key; //para shared memory
     int fd; //para mmap
+    time_t timestamp;
     struct MemoryBlock *next;
 }MemoryBlock;
 
@@ -126,6 +127,59 @@ char * ConvierteModo3 (mode_t m)
     return permisos;
 }  
 
+
+void freeEntries();
+char LetraTF(mode_t m);
+char *ConvierteModo3(mode_t m);
+void ImprimirListaMmap(MemoryBlock *memoryList);
+void ImprimirListaShared();
+void *cadtop(const char *str);
+MemoryBlock *buscarMallocBlock(size_t tam);
+void addMemoryBlock(void *address, size_t size, char *type, key_t key, int fd);
+void removeMemoryBlock(void *address);
+void Recursiva(int n);
+void LlenarMemoria(void *p, size_t cont, unsigned char byte);
+void *ObtenerMemoriaShmget(key_t clave, size_t tam);
+void do_AllocateCreateshared(char *tr[]);
+void do_AllocateShared(char *tr[]);
+void *MapearFichero(char *fichero, int protection);
+void do_AllocateMmap(char *arg[]);
+void do_DeallocateDelkey(char *args[]);
+ssize_t LeerFichero(char *f, void *p, size_t cont);
+void Cmd_ReadFile(char *ar[]);
+void Do_pmap(void);
+void addCommand(char *tr[]);
+int getTotalHistCount();
+void printHistory();
+void printLastNCommands(int n);
+void clearHistory();
+int TrocearCadena(char *cadena, char *tr[]);
+char *Mode(int mode);
+void AnadirFicherosAbiertos(int fd, const char *name, int mode);
+void EliminarDeFicherosAbiertos(int fd);
+void ListFicherosAbiertos(int fd, tListP *L);
+char *NombreFicheroDescriptor(int fd);
+void Cmd_cwd();
+void fileinfo(const char *path, struct stat *file_stat, int long_format, int acc_time, int link_info);
+void find_max_depth(const char *path, int level);
+int get_max_depth(const char *path);
+void reclist_aux(const char *path, int level, int show_hidden, int long_format, int acc_time, int link_info);
+void guardar_entries_revlist(const char *path, int level, int show_hidden);
+void print_entries_revlist(int long_format, int acc_time, int link_info, int show_hidden);
+void revlist_aux(const char *path, int level, int show_hidden, int long_format, int acc_time, int link_info);
+void ejecutarComandoHistorico(int index, bool *terminado, char *tr[], tListP *openFilesList);
+void liberar_memoria();
+void deallocate_malloc(size_t tam);
+void deallocate_mmap(void *address);
+void deallocate_shared(void *address, key_t key);
+void deallocate_addr(void *address);
+void imprimirPrompt();
+void leerEntrada(char *cmd, char *tr[], char *entrada);
+void guardarLista(char *entrada, char *tr[]);
+void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList);
+void liberar_memoria();
+
+
 void ImprimirListaMmap(MemoryBlock *memoryList){
     MemoryBlock *current = memoryList;
     while(current != NULL){
@@ -161,15 +215,80 @@ MemoryBlock *buscarMallocBlock(size_t tam){
     return NULL;
 }
 
-void Recursiva (int n){
-  char automatico[TAMANO];
-  static char estatico[TAMANO];
+void liberar_memoria() {
+    MemoryBlock *current = memoryList;
+    while (current != NULL) {
+        MemoryBlock *next = current->next;
 
-  printf ("parametro:%3d(%p) array %p, arr estatico %p\n",n,&n,automatico, estatico);
+        // Liberar la memoria del bloque si aplica
+        if (strcmp(current->type, "malloc") == 0) {
+            free(current->address);
+        } else if (strcmp(current->type, "shared") == 0) {
+            shmdt(current->address); // Desvincula memoria compartida
+        }
 
-  if (n>0)
-    Recursiva(n-1);
+        // Liberar el nodo de la lista
+        free(current);
+
+        current = next;
+    }
+
+    memoryList = NULL; // Limpiar la lista
 }
+
+void addMemoryBlock(void *address, size_t size, char *type, key_t key, int fd){
+    MemoryBlock *newBlock = (MemoryBlock *)malloc(sizeof(MemoryBlock));
+    if(newBlock == NULL){
+        printf("Error: No se pudo asignar memoria para el nuevo bloque\n");
+        return;
+    }
+    newBlock->address = address;
+    newBlock->size = size;
+    strncpy(newBlock->type, type, sizeof(newBlock->type) - 1);
+    newBlock->key = key;
+    newBlock->fd = fd;
+    newBlock->timestamp = time(NULL);
+    newBlock->next = memoryList;
+    memoryList = newBlock;
+}
+
+
+void removeMemoryBlock(void *address){
+    MemoryBlock *current = memoryList;
+    MemoryBlock *previous = NULL;
+
+    while(current != NULL){
+        if(current->address == address){
+            if(previous == NULL){
+                memoryList = current->next;
+            }else{
+                previous->next = current->next;
+            }
+            free(current);
+            return;
+        }
+        previous = current;
+        current = current->next;
+    }
+}
+
+void printMemoryBlocks() {
+    printf("******Lista de bloques asignados para el proceso %d\n", getpid());
+        MemoryBlock *current = memoryList;
+        while (current != NULL) {
+            char timebuf[80];
+            struct tm *tm_info = localtime(&current->timestamp);
+            strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", tm_info);
+            if (strcmp(current->type, "shared") == 0) {
+                printf("      %p            %lu %s %s (key %d)\n", current->address, current->size, timebuf, current->type, current->key);
+            } else {
+                printf("      %p            %lu %s %s\n", current->address, current->size, timebuf, current->type);
+            }
+            current = current->next;
+        }
+}
+
+
 
 void LlenarMemoria (void *p, size_t cont, unsigned char byte)
 {
@@ -232,7 +351,7 @@ void do_AllocateCreateshared (char *tr[])
 void do_AllocateShared (char *tr[])
 {
    key_t cl;
-   size_t tam;
+   //size_t tam;
    void *p;
 
    if (tr[0]==NULL) {
@@ -1287,118 +1406,155 @@ void Cmd_infosys(char *tr[], char *cmd){ //Función para mostrar información de
     }
 }
 
+
+
+void *allocateMalloc(size_t size) {
+    void *address = malloc(size);
+    if (address != NULL) {
+        addMemoryBlock(address, size, "malloc", 0, -1);
+    }
+    return address;
+}
+
+void *allocateMmap(const char *file, int perm) {
+    int fd = open(file, O_RDWR);
+    if (fd == -1) {
+        perror("Failed to open file");
+        return NULL;
+    }
+    struct stat st;
+    if (fstat(fd, &st) == -1) {
+        perror("Failed to get file size");
+        close(fd);
+        return NULL;
+    }
+    void *address = mmap(NULL, st.st_size, perm, MAP_SHARED, fd, 0);
+    if (address == MAP_FAILED) {
+        perror("Failed to map file");
+        close(fd);
+        return NULL;
+    }
+    addMemoryBlock(address, st.st_size, "mmap", 0, fd);
+    return address;
+}
+
+void *allocateShared(key_t key, size_t size) {
+    int id = shmget(key, size, IPC_CREAT | 0666);
+    if (id == -1) {
+        perror("Failed to create shared memory");
+        return NULL;
+    }
+    void *address = shmat(id, NULL, 0);
+    if (address == (void *)-1) {
+        perror("Failed to attach shared memory");
+        return NULL;
+    }
+    addMemoryBlock(address, size, "shared", key, -1);
+    return address;
+}
+
+void *attachShared(key_t key) {
+    int id = shmget(key, 0, 0666);
+    if (id == -1) {
+        perror("Failed to get shared memory");
+        return NULL;
+    }
+    struct shmid_ds buf;
+    if (shmctl(id, IPC_STAT, &buf) == -1) {
+        perror("Failed to get shared memory info");
+        return NULL;
+    }
+    void *address = shmat(id, NULL, 0);
+    if (address == (void *)-1) {
+        perror("Failed to attach shared memory");
+        return NULL;
+    }
+    addMemoryBlock(address, buf.shm_segsz, "shared", key, -1);
+    return address;
+}
+
 //-malloc n .Allocates a block of malloc memory of size n bytes. Updates the list of memory blocks
 //-mmap file perm. Maps a fille to memory with permissions perm. Updates the list of memory blocks
 //-create shared cl n. Creates a block of shared memory with key cl and size n and attaches it to the process address space.Updates the list of memory blocks
 //-shared cl Attaches block a shared memory to the process address space (the block must be already created but not necessarily attached to the process space). Updates the list of memory blocks
-void Cmd_allocate(char *tr[]) {                                                                                                
-    if (tr[1] == NULL) {                                
-        printf("allocate [-malloc|-mmap|-create|-shared] n\n");
-        printf("    -malloc n: Allocates a block of malloc memory of size n bytes. Updates the list of memory blocks\n");
-        printf("    -mmap file perm: Maps a fille to memory with permissions perm. Updates the list of memory blocks\n");
-        printf("    -create shared cl n: Creates a block of shared memory with key cl and size n and attaches it to the process address space.Updates the list of memory blocks\n");                  
-        printf("    -shared cl: Attaches block a shared memory to the process address space (the block must be already created but not necessarily attached to the process space). Updates the list of memory blocks\n");
-        return;                                      
-    }                                                               
-        
+
+void Cmd_allocate(char *tr[]) {
+    if (tr[1] == NULL) {
+        printMemoryBlocks();
+        return;
+    }
+
     if (strcmp(tr[1], "-malloc") == 0) {
         if (tr[2] == NULL) {
-            printf("allocate -malloc n\n");        
-            return;                                
-        }                   
-        int n = atoi(tr[2]);                         
-        if (n <= 0) {                        
+            printf("allocate -malloc n\n");
+            return;
+        }
+        int n = atoi(tr[2]);
+        if (n <= 0) {
             printf("Error: n must be greater than 0\n");
             return;
-        }   
-        void *ptr = malloc(n);       
-        if (ptr == NULL) {                          
-            perror("malloc");                       
-            return;          
-        }                    
-        printf("%d bytes allocated in: %p\n",n, ptr);
-        //Prueba                                                    
-        MemoryBlock *newBlock = (MemoryBlock *)malloc(sizeof(MemoryBlock));
-        newBlock->address=ptr;
-        newBlock->size=n;
-        strcpy(newBlock->type, "malloc" );         
-        newBlock->next=memoryList;                 
-        memoryList=newBlock;
-    } else if (strcmp(tr[1], "-mmap") == 0) {        
+        }
+        void *ptr = malloc(n);
+        if (ptr == NULL) {
+            perror("malloc");
+            return;
+        }
+        printf("%d bytes allocated in: %p\n", n, ptr);
+        addMemoryBlock(ptr, n, "malloc", 0, -1);
+    } else if (strcmp(tr[1], "-mmap") == 0) {
         if (tr[2] == NULL || tr[3] == NULL) {
-            printf("allocate -mmap file perm\n");    
+            printf("allocate -mmap file perm\n");
             return;
-        }  
-        int fd = open(tr[2], O_RDWR);
-        if (fd == -1) {                             
-            perror("open");                         
-            return;          
-        }                    
-        int perm = atoi(tr[3]);
-        void *ptr = mmap(NULL, sizeof(fd), perm, MAP_SHARED, fd, 0);
-        if (ptr == MAP_FAILED) { 
-            perror("mmap"); 
+        }
+        int perm = 0;
+        if (strchr(tr[3], 'r') != NULL) perm |= PROT_READ;
+        if (strchr(tr[3], 'w') != NULL) perm |= PROT_WRITE;
+        if (strchr(tr[3], 'x') != NULL) perm |= PROT_EXEC;
+        if (perm == 0) {
+            printf("Invalid permissions. Use a combination of 'r', 'w', and 'x'.\n");
             return;
-        }                                          
-        printf("Memory mapped: %p\n", ptr);        
-    
+        }
+        void *address = allocateMmap(tr[2], perm);
+        if (address != NULL) {
+            printf("Mapped file %s at %p\n", tr[2], address);
+        } else {
+            printf("Failed to map file\n");
+        }
     } else if (strcmp(tr[1], "-createshared") == 0) {
         if (tr[2] == NULL || tr[3] == NULL) {
             printf("allocate -create shared cl n\n");
             return;
         }
-        int cl = atoi(tr[2]);
-        int n = atoi(tr[3]);
-        int shmid = shmget(cl, n, IPC_CREAT | 0666);
-        if (shmid == -1) {
-            perror("shmget");
-            return;
+        key_t key = (key_t)strtoul(tr[2], NULL, 10);
+        size_t size = (size_t)strtoul(tr[3], NULL, 10);
+        void *address = allocateShared(key, size);
+        if (address != NULL) {
+            printf("Created shared memory with key %d and size %lu at %p\n", key, (unsigned long)size, address);
+        } else {
+            printf("Failed to create shared memory\n");
         }
-        void *ptr = shmat(shmid, NULL, 0);
-        if (ptr == (void *) -1) {
-            perror("shmat");
-            return;
-        }
-        printf("Shared memory created: %p\n", ptr);
     } else if (strcmp(tr[1], "-shared") == 0) {
-    if (tr[2] == NULL) {
-        printf("allocate -shared cl\n");
-        return;
-    }
-    int cl = atoi(tr[2]);
-    int shmid = shmget(cl, 0, 0666);
-    if (shmid == -1) {
-        perror("shmget");
-        return;
-    }
-    void *ptr = shmat(shmid, NULL, 0);
-    if (ptr == (void *) -1) {
-        perror("shmat");
-        return;
-    }
-    printf("Shared memory attached: %p\n", ptr);
-
-    // Guardar la dirección en la lista de bloques de memoria
-    MemoryBlock *newBlock = (MemoryBlock *)malloc(sizeof(MemoryBlock));
-    if (newBlock == NULL) {
-        perror("Error al asignar memoria para el bloque");
-        return;
-    }
-    newBlock->address = ptr;
-    newBlock->size = 0; // Tamaño puede no ser relevante en este contexto
-    newBlock->key = cl; // Guardamos la clave en el bloque
-    strcpy(newBlock->type, "shared");
-    newBlock->next = memoryList;
-    memoryList = newBlock;
+        if (tr[2] == NULL) {
+            printf("allocate -shared cl\n");
+            return;
+        }
+        key_t key = (key_t)strtoul(tr[2], NULL, 10);
+        void *address = attachShared(key);
+        if (address != NULL) {
+            printf("Attached shared memory with key %d at %p\n", key, address);
+        } else {
+            printf("Failed to attach shared memory\n");
+        }
     } else {
-        printf("Error: Invalid option\n");
+        printf("Unknown command\n");
     }
 }
+
 
 void deallocate_malloc(size_t tam){                   
     MemoryBlock *actual = memoryList;
     MemoryBlock *previo = NULL;
-  while(actual != NULL){
+    while(actual != NULL){
         if(actual->size == tam && strcmp(actual->type, "malloc")==0){
             free(actual->address);
             if(previo==NULL){
@@ -1414,6 +1570,7 @@ void deallocate_malloc(size_t tam){
     }
     printf("No hay bloque de ese tamaño asignado con malloc");
 }
+
 void deallocate_mmap(void *address){                       
     MemoryBlock *actual = memoryList; //Recorre la lista de bloques
     MemoryBlock *previo = NULL; //Apunta al bloque anterior    
@@ -1421,7 +1578,7 @@ void deallocate_mmap(void *address){
     while(actual!=NULL){ //Siempre que el bloque no sea nulo       
         if(actual->address==address && strcmp(actual->type, "mmap")==0){ //El bloque actual coincide con la dirección y es de tipo mmap
             if(munmap(actual->address, actual->size)==-1){ //Desmapea la memoria 
-perror("Error al desmapear la memoria");           
+            perror("Error al desmapear la memoria");           
                 return;                                    
             }                                                      
             if(close(actual->fd)==-1){ //Cierra el archivo             
@@ -1444,33 +1601,7 @@ perror("Error al desmapear la memoria");
         actual=actual->next;                               
     }                        
     printf("Imposible mapear fichero: Invalid argument");    
-}      
-/*void deallocate_shared(void *address){                             
-    MemoryBlock *actual = memoryList; //Recorre la lista de bloques
-    MemoryBlock *previo = NULL; //Apunta al bloque anterior
-                
-    while(actual!=NULL){ //Siempre que el bloque no sea nulo   
-        if(actual->address==address && strcmp(actual->type, "shared")==0){ //El bloque actual coincide con la dirección y es de tipo shared
-            if(shmdt(actual->address)==-1){//Desacopla el bloque de memoria. La función shmdt se encarga de desacoplar el segmento de memoria compartida    
-   perror("Error al desacoplar la memoria compartida");
-            }                                                      
-                                                           
-            printf("Memoria desacoplada %p",address);              
-            //Actualizar memoryList                                    
-            if(previo==NULL){
-                    memoryList=actual->next;                   
-                }else{
-                    previo->next=actual->next;                     
-                }
-
-                free(actual); //Libera el struct MemoryBlock del bloque que se eliminó                                                 
-                return;                                          
-        }                                        
-        //Avanza a la posición siguiente de la lista
-        previo=actual;
-        actual=actual->next;
-    }                                                              
-}*/
+}
 
 void deallocate_shared(void *address, key_t key) {
     MemoryBlock *current = memoryList;
@@ -1544,9 +1675,12 @@ void deallocate_addr(void *address) {
 }
  
 
-void Cmd_deallocate(char *tr[], char *cmd){
-    for(int i=0;tr[i]!=NULL;i++){                                  
-        if(strcmp(tr[i],"-?")==0){ //Imprime la ayuda                  
+void Cmd_deallocate(char *tr[], char *cmd){       
+        if(tr[1]==NULL){ //Si no hay argumentos
+            printMemoryBlocks(); //Imprime los bloques de memoria
+            return;
+        }                        
+        if(strcmp(tr[1],"-?")==0){ //Imprime la ayuda                  
             printf("deallocate [-malloc|-shared|-delkey|-mmap|addr].. Desasigna un bloque de memoria\n");     
             printf("-malloc tam: desasigna el bloque malloc de tamano tam\n");            
             printf("-shared cl: desasigna (desmapea) el bloque de memoria compartida de clave cl\n");
@@ -1555,11 +1689,11 @@ void Cmd_deallocate(char *tr[], char *cmd){
             printf("addr: desasigna el bloque de memoria en la direccion addr\n");                                                       
             return;
         }  
-        if(strcmp(tr[i],"-malloc")==0){
-            size_t tam=(size_t)strtoul(tr[i+1],NULL,10); //Convierte el tamaño a un numero, con la funcion strtoul                         
+        if(strcmp(tr[1],"-malloc")==0){
+            size_t tam=(size_t)strtoul(tr[2],NULL,10); //Convierte el tamaño a un numero, con la funcion strtoul                         
             void *addr=buscarMallocBlock(tam); //Busca el bloque malloc
             if(addr!=NULL){                                      
-                deallocate_malloc(addr);
+                deallocate_malloc(tam); //Desasigna el bloque mallocs
                 printf("Bloque malloc de tamaño %lu liberado\n",tam); 
             }else{
                 printf("No se encontro el bloque de tamaño %lu\n",tam);
@@ -1567,8 +1701,8 @@ void Cmd_deallocate(char *tr[], char *cmd){
             return;                      
         }                                                          
             
-        if(strcmp(tr[i],"-mmap")==0){                        
-            char *filename=tr[i+1];                              
+        if(strcmp(tr[1],"-mmap")==0){                        
+            char *filename=tr[2];                              
             void *addr=buscarMallocBlock(*filename); //Buscar el bloque malloc                                                                
             if(addr!=NULL){
                 deallocate_mmap(addr);
@@ -1578,47 +1712,33 @@ void Cmd_deallocate(char *tr[], char *cmd){
             }                            
             return;                             
         } 
-        if(strcmp(tr[i],"-shared")==0){
-            key_t clave=(key_t)strtoul(tr[i+1],NULL,10); //Convierte la clave a un numero, con la funcion strtoul
+        if(strcmp(tr[1],"-shared")==0){
+            key_t clave=(key_t)strtoul(tr[2],NULL,10); //Convierte la clave a un numero, con la funcion strtoul
             deallocate_shared(NULL,clave);
             return;
         }
-        if (strcmp(tr[i], "-delkey") == 0) {
-            if (tr[i + 1] == NULL) {
-                printf("Se requiere una clave para -delkey\n");
-                return;
+        if (strcmp(tr[1], "-delkey") == 0) {
+            if (tr[2] == NULL) {
+            printf("Se requiere una clave para -delkey\n");
+            return;
             }
-
-            // Convierte la clave en un número entero
-            key_t clave = (key_t)strtoul(tr[i + 1], NULL, 10);
-
-            // Obtiene el identificador de la memoria compartida
-            int shmid = shmget(clave, 0, 0666);
-            if (shmid == -1) {
-                perror("shmget: No se pudo obtener la memoria compartida");
-                return;
-            }
-
-            // Intenta eliminar la memoria compartida usando shmctl
-            if (shmctl(shmid, IPC_RMID, NULL) == -1) {
-               perror("shmctl: Error al eliminar la clave de memoria compartida");
-            } else {
-                printf("Clave de memoria compartida %d eliminada correctamente.\n", clave);
-            }
+            char key_str[20];
+            snprintf(key_str, sizeof(key_str), "%d", (int)strtoul(tr[2], NULL, 10));
+            char *args[] = {key_str, NULL};
+            do_DeallocateDelkey(args);
         }
-        if(strcmp(tr[i],"addr")==0){
-            void *addr=(void *)strtoul(tr[i+1],NULL,16);
-                if(addr!=NULL){
-                    deallocate_addr(addr);
-                    printf("Bloque %p desasignado",addr);
-                }else{
-                    printf("Direccion %p invalida",addr);
-                }
-                return;
-            }    
-        printf("Comando invalido");
-    }
+        if (tr[1] != NULL && strncmp(tr[1], "0x", 2) == 0) {
+            void *addr = (void *)strtoul(tr[1], NULL, 16);
+            if (addr != NULL) {
+                deallocate_addr(addr);
+                printf("Bloque %p desasignado\n", addr);
+            } else {
+                printf("Direccion %p invalida\n", addr);
+            }
+            return;
+        }
 }
+
 
 
 
@@ -1691,16 +1811,16 @@ void Cmd_memory(char *tr[], char *cmd) { // Función para mostrar información d
 
     if (strcmp(tr[1], "-funcs") == 0 || strcmp(tr[1], "-all") == 0) {
         // Direcciones de 3 funciones del programa
-        printf("Program functions:\n");
-        printf("  Cmd_memory: %p\n", Cmd_memory);
-        printf("  Cmd_authors: %p\n", Cmd_authors);
-        printf("  Cmd_pid: %p\n", Cmd_pid);
+        printf("Program functions:");
+        printf("  Cmd_memory: %p,", Cmd_memory);
+        printf("  Cmd_authors: %p,", Cmd_authors);
+        printf("  Cmd_pid: %p.\n", Cmd_pid);
 
         // Direcciones de 3 funciones de la biblioteca
-        printf("Library functions:\n");
-        printf("  printf: %p\n", printf);
-        printf("  malloc: %p\n", malloc);
-        printf("  free: %p\n", free);
+        printf("Library functions:");
+        printf("  printf: %p,", printf);
+        printf("  malloc: %p,", malloc);
+        printf("  free: %p.\n", free);
     }
 
     if (strcmp(tr[1], "-vars") == 0 || strcmp(tr[1], "-all") == 0) {
@@ -1708,52 +1828,50 @@ void Cmd_memory(char *tr[], char *cmd) { // Función para mostrar información d
         extern int max_depth;
         extern char *history[MAXH];
         extern int history_count;
-        printf("External variables:\n");
-        printf("  max_depth: %p\n", &max_depth);
-        printf("  history: %p\n", &history);
+        printf("External variables:");
+        printf("  max_depth: %p,", &max_depth);
+        printf("  history: %p,", &history);
         printf("  history_count: %p\n", &history_count);
 
         // Variables externas inicializadas
         extern int openFilesCount;
         extern File openFiles[MAX];
         extern ComandNode *historyList;
-        printf("External initialized variables:\n");
-        printf("  openFilesCount: %p\n", &openFilesCount);
-        printf("  openFiles: %p\n", &openFiles);
-        printf("  historyList: %p\n", &historyList);
+        printf("External initialized variables:");
+        printf("  openFilesCount: %p,", &openFilesCount);
+        printf("  openFiles: %p,", &openFiles);
+        printf("  historyList: %p.\n", &historyList);
 
         // Variables estáticas
         static int static_var1;
         static int static_var2;
         static int static_var3;
-        printf("Static variables:\n");
-        printf("  static_var1: %p\n", &static_var1);
-        printf("  static_var2: %p\n", &static_var2);
+        printf("Static variables:");
+        printf("  static_var1: %p,", &static_var1);
+        printf("  static_var2: %p,", &static_var2);
         printf("  static_var3: %p\n", &static_var3);
 
         // Variables estáticas inicializadas
         static int static_init_var1 = 1;
         static int static_init_var2 = 2;
         static int static_init_var3 = 3;
-        printf("Static initialized variables:\n");
-        printf("  static_init_var1: %p\n", &static_init_var1);
-        printf("  static_init_var2: %p\n", &static_init_var2);
+        printf("Static initialized variables:");
+        printf("  static_init_var1: %p,", &static_init_var1);
+        printf("  static_init_var2: %p,", &static_init_var2);
         printf("  static_init_var3: %p\n", &static_init_var3);
 
         // Variables automáticas
         int auto_var1;
         int auto_var2;
         int auto_var3;
-        printf("Automatic variables:\n");
-        printf("  auto_var1: %p\n", &auto_var1);
-        printf("  auto_var2: %p\n", &auto_var2);
+        printf("Automatic variables:");
+        printf("  auto_var1: %p,", &auto_var1);
+        printf("  auto_var2: %p,", &auto_var2);
         printf("  auto_var3: %p\n", &auto_var3);
     }
 
     if (strcmp(tr[1], "-blocks") == 0 || strcmp(tr[1], "-all") == 0) {
-        printf("Allocated blocks:\n");
-        ImprimirListaMmap(memoryList);
-        ImprimirListaShared();
+        printMemoryBlocks();
     }
 
     if (strcmp(tr[1], "-pmap") == 0) {
@@ -1861,8 +1979,30 @@ void Cmd_read(char *tr[], char *cmd) { // Función para leer un archivo usando u
     }
 }
 
-void Cmd_recurse(){
+void Cmd_recurse(char *tr[], char *cmd) {
+    if (tr[1] == NULL) {
+        printf("Usage: recurse n\n");
+        return;
+    }
 
+    int n = atoi(tr[1]);
+    if (n < 0) {
+        printf("Error: n must be a non-negative integer\n");
+        return;
+    }
+
+    Recursiva(n);
+}
+
+void Recursiva(int n) {
+    char automatico[TAMANO];
+    static char estatico[TAMANO];
+
+    printf("Parametro: %3d, (%p), array: %p, static array : %p\n", n, (void*)&n, (void*)automatico, (void*)estatico);
+
+    if (n > 0) {
+        Recursiva(n - 1);
+    }
 }
 
 
@@ -2003,7 +2143,7 @@ void imprimirPrompt(){ //Función para imprimir el prompt
         folder++; // Avanza el puntero para omitir el '/'
     }
 
-    printf("[%s] %s:%s $", hora, user, folder); //Imprime la hora, el nombre del usuario y la carpeta actual
+    printf("[%s] %s:%s $ ", hora, user, folder); //Imprime la hora, el nombre del usuario y la carpeta actual
 }
 void leerEntrada(char *cmd, char *tr[], char *entrada){ //Función para leer la entrada
     fgets(entrada,MAX,stdin); //Lee la entrada
@@ -2034,6 +2174,7 @@ void Cmd_quit(bool *terminado, char *tr[], tListP *openFilesList){ //Función pa
         free(lastCommand); //Libera el último comando
         lastCommand = NULL; //El último comando es nulo
         }
+        liberar_memoria();//Libera la memoria  
         
     }else{
         printf("Error: Invalid option\n");
@@ -2096,7 +2237,17 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
         }else if(strcmp(tr[0], "memdump") == 0){
                 Cmd_memdump(tr, cmd);
         }else if(strcmp(tr[0], "memory") == 0){
-                Cmd_memory(tr, cmd);        
+                Cmd_memory(tr, cmd);    
+        }else if(strcmp(tr[0], "readfile") == 0){
+                Cmd_readfile(tr, cmd);
+        }else if(strcmp(tr[0], "writefile") == 0){
+                Cmd_writefile(tr, cmd);
+        }else if(strcmp(tr[0], "write") == 0){
+                Cmd_write(tr, cmd);
+        }else if(strcmp(tr[0], "read") == 0){
+                Cmd_read(tr, cmd);
+        }else if(strcmp(tr[0], "recurse") == 0){
+                Cmd_recurse(tr, cmd);    
         }else{ 
             fprintf(stderr,"%s \n",cmd); 
         }
@@ -2123,3 +2274,4 @@ int main(){
 }
 
     
+//pregunta, en deallocate -malloc si hay dos con el mismo tampaño da igual que empiece por el ultimo o por el primero?
