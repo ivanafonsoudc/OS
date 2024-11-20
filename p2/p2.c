@@ -1750,7 +1750,7 @@ void Cmd_memfill(char *tr[], char *cmd) { // Función para llenar la memoria con
 
     void *addr = (void *)strtoul(tr[1], NULL, 16); // Convierte la dirección a un número
     size_t cont = (size_t)strtoul(tr[2], NULL, 10); // Convierte el tamaño a un número
-    unsigned char ch = (unsigned char)strtoul(tr[3], NULL, 10); // Convierte el carácter a un número
+    unsigned char ch = (unsigned char)tr[3][0]; // Convierte el carácter a un número
 
     if (addr == NULL) { // Si la dirección es nula
         printf("Invalid address\n"); // Imprime que la dirección es inválida
@@ -1759,6 +1759,7 @@ void Cmd_memfill(char *tr[], char *cmd) { // Función para llenar la memoria con
 
     LlenarMemoria(addr, cont, ch); // Llena la memoria con el carácter
     printf("Memory filled at %p with %zu bytes of %c\n", addr, cont, ch); // Imprime que la memoria se ha llenado
+    free(addr); // Libera la dirección
 }
 
 void Cmd_memdump(char *tr[], char *cmd) { // Función para volcar la memoria
@@ -1890,7 +1891,7 @@ void Cmd_readfile(char *tr[], char *cmd) { // Función para leer un archivo
     size_t cont = (size_t)strtoul(tr[3], NULL, 10); // Convierte el tamaño a un número
 
     if (addr == NULL) { // Si la dirección es nula
-        printf("Invalid address\n"); // Imprime que la dirección es inválida
+        printf("Invalid address\n"); // Imprime que la dirección es ipmapnválida
         return;
     }
 
