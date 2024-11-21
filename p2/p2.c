@@ -1724,7 +1724,7 @@ void Cmd_deallocate(char *tr[], char *cmd){
             
         if(strcmp(tr[1],"-mmap")==0){                        
             char *filename=tr[2];   
-            MemoryBlock *block =buscarMallocBlock(*filename);                           
+            MemoryBlock *block =buscarMmapBlock(filename);                           
             if(block!=NULL){
                 if(block -> address != NULL){
                     deallocate_mmap(block->address);
