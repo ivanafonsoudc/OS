@@ -82,6 +82,7 @@ typedef struct MemoryBlock{
     char type[10]; // malloc, mmap, shared
     key_t key; //para shared memory
     int fd; //para mmap
+    char *filename; //para mmap
     time_t timestamp;
     struct MemoryBlock *next;
 }MemoryBlock;
@@ -1408,6 +1409,26 @@ void Cmd_infosys(char *tr[], char *cmd){ //Función para mostrar información de
 
 
 
+
+MemoryBlock *buscarMmapBlock(char *filename){
+    if(filename == NULL){
+        printf("Nombre de archivo no valido\n");
+        return NULL;
+    }
+    MemoryBlock *actual = memoryList;
+    if(actual==NULL){
+        printf("Lista de bloques vacia.\n");
+        return NULL;
+    }
+    while(actual!=NULL){
+        if(strcmp(actual->type, "mmap") == 0){
+            return actual;
+        }
+        actual = actual -> next;
+    }
+    return NULL;
+}
+
 void *allocateMalloc(size_t size) {
     void *address = malloc(size);
     if (address != NULL) {
@@ -1428,7 +1449,7 @@ void *allocateMmap(const char *file, int perm) {
         close(fd);
         return NULL;
     }
-    void *address = mmap(NULL, st.st_size, perm, MAP_SHARED, fd, 0);
+    void *address = mmap(NULL, st.st_size, perm, MAP_PRIVATE, fd,0);
     if (address == MAP_FAILED) {
         perror("Failed to map file");
         close(fd);
@@ -1702,15 +1723,18 @@ void Cmd_deallocate(char *tr[], char *cmd){
         }                                                          
             
         if(strcmp(tr[1],"-mmap")==0){                        
-            char *filename=tr[2];                              
-            void *addr=buscarMallocBlock(*filename); //Buscar el bloque malloc                                                                
-            if(addr!=NULL){
-                deallocate_mmap(addr);
-                printf("Fichero %s designado\n",filename);
-            }else{                     
-                printf("No se encontro el mapeo de %s\n",filename);
+            char *filename=tr[2];   
+            MemoryBlock *block =buscarMallocBlock(*filename);                           
+            if(block!=NULL){
+                if(block -> address != NULL){
+                    deallocate_mmap(block->address);
+                    printf("Fichero %s designado\n", filename);
+                }else{
+                    printf("Direccion de memoria del mapeo %s invalida\n", filename);
+                }
+            }else{
+                printf("No se encontro el mapeo de %s\n", filename);
             }                            
-            return;                             
         } 
         if(strcmp(tr[1],"-shared")==0){
             key_t clave=(key_t)strtoul(tr[2],NULL,10); //Convierte la clave a un numero, con la funcion strtoul
