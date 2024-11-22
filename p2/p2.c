@@ -35,6 +35,7 @@
 #define MAX 1024
 #define MAXTR 100
 #define MAXH 100
+#define MAXFD 20
 
 int TrocearCadena(char *cadena, char *tr[]); //Funcion que trocea la cadena de entrada
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList); //Funcion que procesa la entrada
@@ -158,7 +159,7 @@ int TrocearCadena(char *cadena, char *tr[]);
 char *Mode(int mode);
 void AnadirFicherosAbiertos(int fd, const char *name, int mode);
 void EliminarDeFicherosAbiertos(int fd);
-void ListFicherosAbiertos(int fd, tListP *L);
+void ListFicherosAbiertos();
 char *NombreFicheroDescriptor(int fd);
 void Cmd_cwd();
 void fileinfo(const char *path, struct stat *file_stat, int long_format, int acc_time, int link_info);
@@ -613,9 +614,10 @@ void EliminarDeFicherosAbiertos(int fd){ //Función para eliminar de ficheros ab
     }
 }
 
-void ListFicherosAbiertos(int fd, tListP *L){ //Función para listar los ficheros abiertos
-    for(int i = 0; i<openFilesCount;i++){ //Recorre los ficheros abiertos
-        printf("Descriptor %d, Name: %s, Mode: %s\n", openFiles[i].fd,openFiles[i].name, Mode(openFiles[i].mode) ); //Imprime el descriptor de fichero, el nombre y el modo
+void ListFicherosAbiertos() {
+    printf("File descriptor\tFile name\tMode\n");
+    for (int i = 0; i<openFilesCount;i++){
+        printf("%d\t\t%s\t\t%d\n", openFiles[i].fd, openFiles[i].name, openFiles[i].mode);
     }
 }
 
@@ -1184,6 +1186,9 @@ void Cmd_delrec(char *tr[], char *cmd){ //Función para borrar directorios recur
 }
 
 void Cmd_authors(char *tr[], char *cmd){ //Función para mostrar los autores
+    if(strcmp(tr[1],"-?")==0){
+        printf("authors [-n|-l]	Muestra los nombres y/o logins de los autores\n");
+    }
     if (tr[1] == NULL){ //Si no hay argumentos
         printf("Ivan Afonso Cerdeira: ivan.afonso@udc.es, Minerva Antia Lago Lopez: minerva.lago.lopez@udc.es\n"); //Imprime los autores
     }else if (strcmp(tr[1], "-l") == 0){ //Si el argumento es -l
@@ -1196,6 +1201,9 @@ void Cmd_authors(char *tr[], char *cmd){ //Función para mostrar los autores
 }
 
 void Cmd_pid(char *tr[], char *cmd){ //Función para mostrar el PID
+    if(strcmp(tr[1],"-?")==0){
+        printf("pid [-p]	Muestra el pid del shell o de su proceso padre\n");
+    }
     if (tr[1] == NULL){ //Si no hay argumentos
         printf("Process ID: %d\n", getpid()); //Imprime el PID
     }else{
@@ -1204,6 +1212,9 @@ void Cmd_pid(char *tr[], char *cmd){ //Función para mostrar el PID
 }
 
 void Cmd_ppid(char *tr[], char *cmd){ //Función para mostrar el PPID
+    if(strcmp(tr[1],"-?")==0){
+        printf("ppid 	Muestra el pid del proceso padre del shell\n");
+    }
     if (tr[1] == NULL){ //Si no hay argumentos
         printf("Parent Process ID: %d\n", getppid()); //Imprime el PPID
     }else{
@@ -1213,6 +1224,9 @@ void Cmd_ppid(char *tr[], char *cmd){ //Función para mostrar el PPID
 
 void Cmd_cd(char *tr[], char *cmd){ //Función para cambiar de directorio
     char path[MAX]; //Path
+    if(strcmp(tr[1],"-?")==0){
+        printf("cd [dir]	Cambia (o muestra) el directorio actual del she\n");
+    }
     if(tr[1] == NULL){ //Si no hay argumentos
         if(getcwd(path,MAX)==NULL){ //Si no se puede obtener el directorio actual
             perror("getcwd"); //Imprime el error
@@ -1235,7 +1249,10 @@ void Cmd_cd(char *tr[], char *cmd){ //Función para cambiar de directorio
    }
 }
 
-void Cmd_date(char *tr[], char *cmd){ //Función para mostrar la fecha y la hora                                   
+void Cmd_date(char *tr[], char *cmd){ //Función para mostrar la fecha y la hora 
+    if(strcmp(tr[1],"-?")==0){
+        printf("date [-d|-t]	Muestra la fecha y/o la hora actual\n");
+    }                                  
    if(tr[1] == NULL){ //Si no hay argumentos
         time_t t; //Tiempo
         struct tm *tm; //Estructura de tiempo
@@ -1767,6 +1784,10 @@ void Cmd_deallocate(char *tr[], char *cmd){
 
 
 void Cmd_memfill(char *tr[], char *cmd) { // Función para llenar la memoria con un carácter
+    if(strcmp(tr[1],"-?")==0){ //Si el argumento es -?
+        printf("memfill addr cont ch    Llena la memoria a partir de la direccion addr con cont bytes de ch\n"); //Imprime la ayuda
+        return;
+    }
     if (tr[1] == NULL || tr[2] == NULL || tr[3] == NULL) { // Si faltan argumentos
         printf("Usage: memfill addr cont ch\n"); // Imprime el uso correcto
         return;
@@ -1787,6 +1808,10 @@ void Cmd_memfill(char *tr[], char *cmd) { // Función para llenar la memoria con
 }
 
 void Cmd_memdump(char *tr[], char *cmd) { // Función para volcar la memoria
+    if(strcmp(tr[1],"-?")==0){ //Si el argumento es -?
+        printf("memdump addr cont    Volca la memoria a partir de la direccion addr y muestra cont bytes\n"); //Imprime la ayuda
+        return;
+    }
     if (tr[1] == NULL || tr[2] == NULL) { // Si faltan argumentos
         printf("Usage: memdump addr cont\n"); // Imprime el uso correcto
         return;
