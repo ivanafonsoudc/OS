@@ -29,6 +29,7 @@
 #include <sys/wait.h>
 #include <sys/shm.h>
 #include <ctype.h>
+#include <sys/resource.h>
 #include "list.h"
 
 #define TAMANO 2048
@@ -36,6 +37,8 @@
 #define MAXTR 100
 #define MAXH 100
 #define MAXFD 20
+#define MAXNAME 256
+#define MAXVAR 100
 
 int TrocearCadena(char *cadena, char *tr[]); //Funcion que trocea la cadena de entrada
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList); //Funcion que procesa la entrada
@@ -72,6 +75,11 @@ typedef struct { // Estructura para almacenar las entradas de los directorios
 
 FileEntry entries[MAX]; // Array de entradas de directorios
 int entry_count = 0; // Número de entradas de directorios
+
+struct SEN { // Estructura para almacenar las señales
+    char *nombre;
+    int senal;
+};
 
 void freeEntries() { // Función para liberar las entradas de directorios
     entry_count = 0;
@@ -129,6 +137,79 @@ char * ConvierteModo3 (mode_t m)
     return permisos;
 }  
 
+/*las siguientes funciones nos permiten obtener el nombre de una senal a partir
+del nÃºmero y viceversa */
+static struct SEN sigstrnum[]={   
+	{"HUP", SIGHUP},
+	{"INT", SIGINT},
+	{"QUIT", SIGQUIT},
+	{"ILL", SIGILL}, 
+	{"TRAP", SIGTRAP},
+	{"ABRT", SIGABRT},
+	{"IOT", SIGIOT},
+	{"BUS", SIGBUS},
+	{"FPE", SIGFPE},
+	{"KILL", SIGKILL},
+	{"USR1", SIGUSR1},
+	{"SEGV", SIGSEGV},
+	{"USR2", SIGUSR2}, 
+	{"PIPE", SIGPIPE},
+	{"ALRM", SIGALRM},
+	{"TERM", SIGTERM},
+	{"CHLD", SIGCHLD},
+	{"CONT", SIGCONT},
+	{"STOP", SIGSTOP},
+	{"TSTP", SIGTSTP}, 
+	{"TTIN", SIGTTIN},
+	{"TTOU", SIGTTOU},
+	{"URG", SIGURG},
+	{"XCPU", SIGXCPU},
+	{"XFSZ", SIGXFSZ},
+	{"VTALRM", SIGVTALRM},
+	{"PROF", SIGPROF},
+	{"WINCH", SIGWINCH}, 
+	{"IO", SIGIO},
+	{"SYS", SIGSYS},
+/*senales que no hay en todas partes*/
+#ifdef SIGPOLL
+	{"POLL", SIGPOLL},
+#endif
+#ifdef SIGPWR
+	{"PWR", SIGPWR},
+#endif
+#ifdef SIGEMT
+	{"EMT", SIGEMT},
+#endif
+#ifdef SIGINFO
+	{"INFO", SIGINFO},
+#endif
+#ifdef SIGSTKFLT
+	{"STKFLT", SIGSTKFLT},
+#endif
+#ifdef SIGCLD
+	{"CLD", SIGCLD},
+#endif
+#ifdef SIGLOST
+	{"LOST", SIGLOST},
+#endif
+#ifdef SIGCANCEL
+	{"CANCEL", SIGCANCEL},
+#endif
+#ifdef SIGTHAW
+	{"THAW", SIGTHAW},
+#endif
+#ifdef SIGFREEZE
+	{"FREEZE", SIGFREEZE},
+#endif
+#ifdef SIGLWP
+	{"LWP", SIGLWP},
+#endif
+#ifdef SIGWAITING
+	{"WAITING", SIGWAITING},
+#endif
+ 	{NULL,-1},
+	};    /*fin array sigstrnum */
+
 
 void freeEntries();
 char LetraTF(mode_t m);
@@ -181,6 +262,136 @@ void guardarLista(char *entrada, char *tr[]);
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList);
 void liberar_memoria();
 
+void Cmd_fork (char *tr[]){
+	pid_t pid;
+	
+	if ((pid=fork())==0){
+/*		VaciarListaProcesos(&LP); Depende de la implementaciÃ³n de cada uno*/
+		printf ("ejecutando proceso %d\n", getpid());
+	}
+	else if (pid!=-1)
+		waitpid (pid,NULL,0);
+}
+
+int BuscarVariable (char * var, char *e[])  /*busca una variable en el entorno que se le pasa como parÃ¡metro*/
+{                                           /*devuelve la posicion de la variable en el entorno, -1 si no existe*/
+  int pos=0;
+  char aux[MAXVAR];
+  
+  strcpy (aux,var);
+  strcat (aux,"=");
+  
+  while (e[pos]!=NULL)
+    if (!strncmp(e[pos],aux,strlen(aux)))
+      return (pos);
+    else 
+      pos++;
+  errno=ENOENT;   /*no hay tal variable*/
+  return(-1);
+}
+
+
+int CambiarVariable(char * var, char * valor, char *e[]) /*cambia una variable en el entorno que se le pasa como parÃ¡metro*/
+{                                                        /*lo hace directamente, no usa putenv*/
+  int pos;
+  char *aux;
+   
+  if ((pos=BuscarVariable(var,e))==-1)
+    return(-1);
+ 
+  if ((aux=(char *)malloc(strlen(var)+strlen(valor)+2))==NULL)
+	return -1;
+  strcpy(aux,var);
+  strcat(aux,"=");
+  strcat(aux,valor);
+  e[pos]=aux;
+  return (pos);
+}
+
+char *SearchListFirst() {
+    // Implementación de ejemplo para SearchListFirst
+    // Devuelve el primer elemento de una lista de rutas de búsqueda
+    static char *searchPaths[] = {"/bin", "/usr/bin", "/usr/local/bin", NULL};
+    static int index = 0;
+    index = 0;
+    return searchPaths[index];
+}
+
+char *SearchListNext() {
+    // Implementación de ejemplo para SearchListNext
+    // Devuelve el siguiente elemento de una lista de rutas de búsqueda
+    static char *searchPaths[] = {"/bin", "/usr/bin", "/usr/local/bin", NULL};
+    static int index = 0;
+    index++;
+    if (searchPaths[index] == NULL) {
+        index = 0;
+        return NULL;
+       }
+    return searchPaths[index];
+}
+
+char * Ejecutable (char *s){
+    static char path[MAXNAME];
+    struct stat st;
+    char *p;
+   
+    if (s==NULL || (p=SearchListFirst())==NULL)
+        return s;
+    if (s[0]=='/' || !strncmp (s,"./",2) || !strncmp (s,"../",3))
+    return s;        /*is an absolute pathname*/
+        
+    strncpy (path, p, MAXNAME-1);strncat (path,"/",MAXNAME-1); strncat(path,s,MAXNAME-1);
+    if (lstat(path,&st)!=-1)
+        return path;
+    while ((p=SearchListNext())!=NULL){
+        strncpy (path, p, MAXNAME-1);strncat (path,"/",MAXNAME-1); strncat(path,s,MAXNAME-1);
+        if (lstat(path,&st)!=-1)
+           return path;
+    }
+    return s;
+}
+
+int Execpve(char *tr[], char **NewEnv, int * pprio)
+{
+    char *p;               /*NewEnv contains the address of the new environment*/
+                           /*pprio the address of the new priority*/
+                           /*NULL indicates no change in environment and/or priority*/
+    if (tr[0]==NULL || (p=Ejecutable(tr[0]))==NULL){
+        errno=EFAULT;
+        return-1;
+        }
+    if (pprio !=NULL  && setpriority(PRIO_PROCESS,getpid(),*pprio)==-1 && errno){
+                        printf ("Imposible cambiar prioridad: %s\n",strerror(errno));
+                        return -1;
+        }
+
+        if (NewEnv==NULL)
+                return execv(p,tr);
+        else
+                return execve (p, tr, NewEnv);
+}
+
+
+
+
+int ValorSenal(char * sen)  /*devuelve el numero de senial a partir del nombre*/ 
+{ 
+  int i;
+  for (i=0; sigstrnum[i].nombre!=NULL; i++)
+  	if (!strcmp(sen, sigstrnum[i].nombre))
+		return sigstrnum[i].senal;
+  return -1;
+}
+
+
+char *NombreSenal(int sen)  /*devuelve el nombre senal a partir de la senal*/ 
+{			/* para sitios donde no hay sig2str*/
+ int i;
+  for (i=0; sigstrnum[i].nombre!=NULL; i++)
+  	if (sen==sigstrnum[i].senal)
+		return sigstrnum[i].nombre;
+ return ("SIGUNKNOWN");
+}
 
 void ImprimirListaMmap(MemoryBlock *memoryList){
     MemoryBlock *current = memoryList;
@@ -2049,6 +2260,128 @@ void Recursiva(int n) {
     }
 }
 
+void Cmd_getuid(){
+    uid_t real_uid = getuid();
+    uid_t effective_uid = geteuid();
+
+    printf("Real uid: %d\n", real_uid);
+    printf("Effective uid: %d\n", effective_uid);
+}
+
+//[-l] id 
+void Cmd_setuid(char *tr[], char *cmd){
+    uid_t uid;
+    struct passwd *pwd;
+    int login = 0;
+    if(tr[1] == NULL && strcmp (tr[1], "-l") == 0){
+        login = 1;
+        tr++;
+    }
+    if(tr[1] == NULL){
+        fprintf(stderr, "setuid [-l] id\n");
+        return;
+    }
+    if((pwd = getpwnam(tr[1])) != NULL){
+        uid = pwd-> pw_uid;
+    }else{
+        uid = (uid_t)strtoul(tr[1], NULL, 10);
+    }
+
+    if(login){
+        if(setreuid(uid,uid) == -1){
+            perror("setreuid");
+        }else{
+            printf("UID real y efectivo cambiados a %d\n", uid);
+        }
+    }else{
+        if(setuid(uid) == -1){
+            perror("setuid");
+        }else{
+            printf("UID efectivo cambiado a %d\n", uid);
+        }
+    }
+
+}
+
+//v1 v2 
+void Cmd_showvar(char *tr[],char *vars[]){
+    for(int i=0; vars[i] != NULL; i++){
+        char *value = getenv(vars[i]);
+        if(value != NULL){
+            printf("Variable: %s, Value: %s, Adress:%p\n", vars[i], value, (void*)value);
+        }else{
+            printf("Variable: %s not found\n", vars[i]);
+        }
+    }
+}
+
+//changevar [-a|-e|-p] var val 
+void Cmd_changevar(){
+
+}
+
+//[-a|-e] v1 v2 val 
+void Cmd_subsvar(){
+
+}
+
+//[-environ|-addr]
+void Cmd_environ(){
+
+}
+
+//void Cmd_fork(){
+
+//}
+
+
+//-add dir
+//del dir
+//clear
+//path
+void Cmd_search(){
+
+}
+
+//progspec
+void Cmd_exec(){
+
+}
+
+//prio progspec
+void Cmd_execpri(){
+
+}
+
+//progspec
+void Cmd_fg(){
+
+}
+
+//prio progspec
+void Cmd_fgpri(){
+
+}
+
+//progspec
+void Cmd_back(){
+
+}
+
+//prio progspec
+void Cmd_backpri(){
+
+}
+
+void Cmd_listjobs(){
+
+}
+
+//[-term|-sig] 
+void Cmd_deljobs(){
+
+}
+
 
 void Cmd_help(char *tr[], char *cmd){ //Función para mostrar ayuda sobre los comandos
     if (tr[1] == NULL || strcmp(tr[1], "-?") == 0) {
@@ -2292,6 +2625,38 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
                 Cmd_read(tr, cmd);
         }else if(strcmp(tr[0], "recurse") == 0){
                 Cmd_recurse(tr, cmd);    
+        }else if(strcmp(tr[0], "getuid") == 0){
+                Cmd_getuid();
+        }else if(strcmp(tr[0], "setuid") == 0){
+                Cmd_setuid(tr, cmd);
+        }else if(strcmp(tr[0], "showvar") == 0){
+                Cmd_showvar();
+        }else if(strcmp(tr[0], "changevar") == 0){
+                Cmd_changevar();
+        }else if(strcmp(tr[0], "subsvar") == 0){
+                Cmd_subsvar();
+        }else if(strcmp(tr[0], "environ") == 0){
+                Cmd_environ();
+        }else if(strcmp(tr[0], "fork") == 0){   
+                Cmd_fork(tr);
+        }else if(strcmp(tr[0], "search") == 0){
+                Cmd_search();
+        }else if(strcmp(tr[0], "exec") == 0){
+                Cmd_exec();
+        }else if(strcmp(tr[0], "execpri") == 0){
+                Cmd_execpri();
+        }else if(strcmp(tr[0], "fg") == 0){
+                Cmd_fg();
+        }else if(strcmp(tr[0], "fgpri") == 0){
+                Cmd_fgpri();
+        }else if(strcmp(tr[0], "back") == 0){
+                Cmd_back();
+        }else if(strcmp(tr[0], "backpri") == 0){
+                Cmd_backpri();
+        }else if(strcmp(tr[0], "listjobs") == 0){
+                Cmd_listjobs();
+        }else if(strcmp(tr[0], "deljobs") == 0){
+                Cmd_deljobs();
         }else{ 
             fprintf(stderr,"%s \n",cmd); 
         }
