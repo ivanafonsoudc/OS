@@ -30,6 +30,7 @@
 #include <sys/shm.h>
 #include <ctype.h>
 #include <sys/resource.h>
+#include <signal.h>
 #include "list.h"
 
 #define TAMANO 2048
@@ -39,6 +40,22 @@
 #define MAXFD 20
 #define MAXNAME 256
 #define MAXVAR 100
+#define MAX_SEARCH_DIRS 100
+#define MAX_DIR_LENGTH 256
+#define MAX_JOBS 100
+
+typedef struct {
+    pid_t pid;
+    char cmd[256];
+    char args[256];
+    time_t startTime;
+} Job;
+
+static Job jobs[MAX_JOBS];
+static int jobCount = 0;
+
+static char *searchDirs[MAX_SEARCH_DIRS];
+static int searchDirCount = 0;
 
 int TrocearCadena(char *cadena, char *tr[]); //Funcion que trocea la cadena de entrada
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList); //Funcion que procesa la entrada
@@ -97,6 +114,16 @@ typedef struct MemoryBlock{
 }MemoryBlock;
 
 MemoryBlock *memoryList = NULL; // Lista de bloques de memoria
+
+extern char **environ;
+
+int contarArgumentos(char *tr[]) {
+    int argc = 0;
+    while (tr[argc] != NULL) {
+        argc++;
+    }
+    return argc;
+}
 
 
 char LetraTF (mode_t m){
@@ -262,16 +289,7 @@ void guardarLista(char *entrada, char *tr[]);
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList);
 void liberar_memoria();
 
-void Cmd_fork (char *tr[]){
-	pid_t pid;
-	
-	if ((pid=fork())==0){
-/*		VaciarListaProcesos(&LP); Depende de la implementaciÃ³n de cada uno*/
-		printf ("ejecutando proceso %d\n", getpid());
-	}
-	else if (pid!=-1)
-		waitpid (pid,NULL,0);
-}
+
 
 int BuscarVariable (char * var, char *e[])  /*busca una variable en el entorno que se le pasa como parÃ¡metro*/
 {                                           /*devuelve la posicion de la variable en el entorno, -1 si no existe*/
@@ -2260,6 +2278,72 @@ void Recursiva(int n) {
     }
 }
 
+int modificar_arg(int argc, char *tr[]) {
+    char *var = tr[2];
+    char *valor = tr[3];
+    if (setenv(var, valor, 1) == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+int modificar_environ(char *var, char *valor, char **environ){
+    for(int i=0;environ[i]!=NULL;i++){
+        if (strncmp(environ[i], var, strlen(var)) == 0 && environ[i][strlen(var)] == '=') {
+            snprintf(environ[i], strlen(var) + strlen(valor) + 2, "%s=%s", var, valor); // +2 para '=' y '\0'
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int modificar_arg2(char *var1, char *var2, char *valor, char **environ) {
+    for (int i = 0; environ[i] != NULL; i++) {
+        if (strncmp(environ[i], var1, strlen(var1)) == 0 && environ[i][strlen(var1)] == '=') {
+            // Eliminar la variable antigua
+            unsetenv(var1);
+            // Crear la nueva variable en el mismo lugar
+            char *nueva_var = malloc(strlen(var2) + strlen(valor) + 2); // +2 para '=' y '\0'
+            if (nueva_var == NULL) {
+                perror("No se pudo asignar memoria\n");
+                return 0;
+            }
+            snprintf(nueva_var, strlen(var2) + strlen(valor) + 2, "%s=%s", var2, valor);
+            environ[i] = nueva_var;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int modificar_environ2(char *var1, char *var2, char *valor, char **environ) {
+    for (int i = 0; environ[i] != NULL; i++) {
+        if (strncmp(environ[i], var1, strlen(var1)) == 0 && environ[i][strlen(var1)] == '=') {
+            // Crear la nueva variable en el mismo lugar
+            snprintf(environ[i], strlen(var2) + strlen(valor) + 2, "%s=%s", var2, valor); // +2 para '=' y '\0'
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int modificar_putenv(char *var,char *valor){
+    char *nueva_var=malloc(strlen(var)+strlen(valor)+2); //+2 para que coja la cadena completa
+    if(nueva_var==NULL){
+        perror("No se pudo asignar memoria\n");
+        return 0;
+    }else{
+        snprintf(nueva_var, strlen(var) + strlen(valor) + 2, "%s=%s", var, valor);
+        if(putenv(nueva_var)==0){
+            return 1;
+        }else{
+            free(nueva_var);
+            perror("No se pudo modificar la variable\n");
+            return 0;
+        }
+    }
+}
+
 void Cmd_getuid(){
     uid_t real_uid = getuid();
     uid_t effective_uid = geteuid();
@@ -2304,82 +2388,424 @@ void Cmd_setuid(char *tr[], char *cmd){
 }
 
 //v1 v2 
-void Cmd_showvar(char *tr[],char *vars[]){
-    for(int i=0; vars[i] != NULL; i++){
-        char *value = getenv(vars[i]);
-        if(value != NULL){
-            printf("Variable: %s, Value: %s, Adress:%p\n", vars[i], value, (void*)value);
-        }else{
-            printf("Variable: %s not found\n", vars[i]);
+void Cmd_showvar(int argc,char *tr[], char **environ){ //Falta el ultimo
+    for(int i=1;i<argc;i++){
+        char *var=tr[i];
+        char *valor= getenv(var);
+        if(valor!=NULL){
+            printf("Con arg3 main %s=%s(%p) @%p\n", var,valor, (void *)valor, (void *)environ[i]);
+        }
+        if(modificar_environ(var,valor,environ)){
+            printf("Con environ %s=%s(%p) @%p\n", var,valor, (void *)valor, (void *)environ[i]);
+        }
+        if(valor!=NULL){
+            printf("Con getenv %s(%p)\n",valor, (void *)valor);
         }
     }
 }
 
 //changevar [-a|-e|-p] var val 
-void Cmd_changevar(){
+void Cmd_changevar(int argc, char *tr[], char **environ){
+    if(strcmp(tr[1],"-?")==0){
+        printf("changevar [-a|-e|-p] var valor	Cambia el valor de una variable de entorno\n");
+        printf("-a: accede por el tercer arg de main\n");
+        printf("-e: accede mediante environ\n");
+        printf("-p: accede mediante putenv\n");
+    }
+    char *var=tr[2];
+    char *valor=tr[3];
 
+    if(strcmp(tr[1],"-a")==0){
+        if(modificar_arg(argc,tr)){
+            printf("Variable modificada %s=%s\n",var,valor);
+        }else{
+            printf("No se pudo modificar la variable\n");
+        }
+    }
+
+    if(strcmp(tr[1],"-e")==0){
+        if(modificar_environ(var,valor,environ)){
+            printf("Variable modificada %s=%s\n",var,valor);
+        }else{
+            printf("No se pudo modificar la variable\n");
+        }
+    }
+
+    if(strcmp(tr[1],"-p")==0){
+        if(modificar_putenv(var,valor)){
+            printf("Variable modificada %s=%s\n",var,valor);
+        }else{
+            printf("No se pudo modificar la variable\n");
+        }
+    }
 }
 
 //[-a|-e] v1 v2 val 
-void Cmd_subsvar(){
+void Cmd_subsvar(int argc,char *tr[],char **environ){
+    if (argc < 5) {
+        fprintf(stderr, "Usage: subsvar [-a|-e] var1 var2 valor\n");
+        return;
+    }
 
+    char *var1 = tr[2];
+    char *var2 = tr[3];
+    char *valor = tr[4];
+
+    if (strcmp(tr[1], "-a") == 0) {
+        if (modificar_arg2(var1, var2, valor, environ)) {
+            printf("Variable %s sustituida por %s=%s\n", var1, var2, valor);
+        } else {
+            printf("No se pudo modificar la variable\n");
+        }
+    } else if (strcmp(tr[1], "-e") == 0) {
+        if (modificar_environ2(var1, var2, valor, environ)) {
+            printf("Variable %s sustituida por %s=%s\n", var1, var2, valor);
+        } else {
+            printf("No se pudo modificar la variable\n");
+        }
+    } else {
+        fprintf(stderr, "Usage: subsvar [-a|-e] var1 var2 valor\n");
+    }
 }
+
 
 //[-environ|-addr]
-void Cmd_environ(){
-
+void Cmd_environ(int argc, char *tr[],char **environ){
+    if(argc < 2 || tr[1] == NULL || strcmp(tr[1],"-environ")==0){
+        for(int i=0;environ[i]!=NULL;i++){
+            printf("%p->environ[%d]=(0x%p) %s\n", (void *)&environ[i],i, (void *)environ[i], environ[i]);
+        }
+    }else if(strcmp(tr[1],"-addr")==0){
+        printf("environ: %p(almacenado en %p)\n",(void *)environ, (void *) &environ);
+        printf("main arg3: %p(almacenado en %p)\n",(void *)environ, (void *) &tr[2]);
+    }else if(strcmp(tr[1],"-?")==0){
+        printf("environ [-environ|-addr]	Muestra las variables de entorno\n");
+        printf("-environ: Muestra las variables de entorno\n");
+        printf("-addr: Muestra las direcciones de las variables de entorno\n");
+    }
 }
 
-//void Cmd_fork(){
 
-//}
+void Cmd_fork (char *tr[]){
+	pid_t pid;
+	
+	if ((pid=fork())==0){
+/*		VaciarListaProcesos(&LP); Depende de la implementaciÃ³n de cada uno*/
+		printf ("ejecutando proceso %d\n", getpid());
+	}
+	else if (pid!=-1)
+		waitpid (pid,NULL,0);
+}
 
 
-//-add dir
-//del dir
-//clear
-//path
-void Cmd_search(){
+int addSearchDir(const char *dir) {
+    if (searchDirCount >= MAX_SEARCH_DIRS) {
+        return -1;
+    }
+    searchDirs[searchDirCount] = strdup(dir);
+    if (searchDirs[searchDirCount] == NULL) {
+        return -1;
+    }
+    searchDirCount++;
+    return 0;
+}
 
+int delSearchDir(const char *dir) {
+    for (int i = 0; i < searchDirCount; i++) {
+        if (strcmp(searchDirs[i], dir) == 0) {
+            free(searchDirs[i]);
+            for (int j = i; j < searchDirCount - 1; j++) {
+                searchDirs[j] = searchDirs[j + 1];
+            }
+            searchDirs[searchDirCount - 1] = NULL;
+            searchDirCount--;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+void clearSearchDirs() {
+    for (int i = 0; i < searchDirCount; i++) {
+        free(searchDirs[i]);
+        searchDirs[i] = NULL;
+    }
+    searchDirCount = 0;
+}
+
+char *getSearchPath() {
+    if (searchDirCount == 0) {
+        return NULL;
+    }
+    size_t pathLength = 0;
+    for (int i = 0; i < searchDirCount; i++) {
+        pathLength += strlen(searchDirs[i]) + 1; // +1 for ':' or '\0'
+    }
+    char *path = malloc(pathLength);
+    if (path == NULL) {
+        return NULL;
+    }
+    path[0] = '\0';
+    for (int i = 0; i < searchDirCount; i++) {
+        strcat(path, searchDirs[i]);
+        if (i < searchDirCount - 1) {
+            strcat(path, ":");
+        }
+    }
+    return path;
+}
+
+int importPath() {
+    char *pathEnv = getenv("PATH");
+    if (pathEnv == NULL) {
+        fprintf(stderr, "Error: PATH environment variable not found\n");
+        return -1;
+    }
+
+    char *pathCopy = strdup(pathEnv);
+    if (pathCopy == NULL) {
+        perror("strdup");
+        return -1;
+    }
+
+    int count = 0;
+    char *token = strtok(pathCopy, ":");
+    while (token != NULL) {
+        if (addSearchDir(token) == 0) {
+            count++;
+        }
+        token = strtok(NULL, ":");
+    }
+
+    free(pathCopy);
+    return count;
+}
+
+void Cmd_search(char *tr[], char *cmd) {
+    if (tr[1] == NULL) {
+        fprintf(stderr, "search [-add dir|-del dir|-clear|-path]\n");
+        return;
+    }
+    if (strcmp(tr[1], "-add") == 0) {
+        if (tr[2] == NULL) {
+            fprintf(stderr, "search -add dir\n");
+            return;
+        }
+        if (addSearchDir(tr[2]) == -1) {
+            fprintf(stderr, "Error adding directory\n");
+        }
+    } else if (strcmp(tr[1], "-del") == 0) {
+        if (tr[2] == NULL) {
+            fprintf(stderr, "search -del dir\n");
+            return;
+        }
+        if (delSearchDir(tr[2]) == -1) {
+            fprintf(stderr, "Error deleting directory\n");
+        }
+    } else if (strcmp(tr[1], "-clear") == 0) {
+        clearSearchDirs();
+    } else if (strcmp(tr[1], "-path") == 0) {
+        int count = importPath();
+        if (count >= 0) {
+            printf("Importados %d directorios en la ruta de busqueda\n", count);
+        }
+    } else {
+        fprintf(stderr, "Invalid option %s\n", tr[1]);
+    }
 }
 
 //progspec
-void Cmd_exec(){
+void Cmd_exec(char *tr[], char *cmd){
+    if (tr[1] == NULL) {
+        fprintf(stderr, "Usage: exec progspec\n");
+        return;
+    }
 
+    execvp(tr[1], &tr[1]);
+    perror("execvp");
 }
 
 //prio progspec
-void Cmd_execpri(){
+void Cmd_execpri(char *tr[], char *cmd) {
+    if (tr[1] == NULL || tr[2] == NULL) {
+        fprintf(stderr, "Usage: execpri prio progspec\n");
+        return;
+    }
 
+    int prio = atoi(tr[1]);
+    if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
+        perror("setpriority");
+        return;
+    }
+
+    execvp(tr[2], &tr[2]);
+    perror("execvp");
+}
+
+
+//progspec
+void Cmd_fg(char *tr[], char *cmd) {
+    if (tr[1] == NULL) {
+        fprintf(stderr, "Usage: fg progspec\n");
+        return;
+    }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        execvp(tr[1], &tr[1]);
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        waitpid(pid, NULL, 0);
+    } else {
+        perror("fork");
+    }
+}
+
+//prio progspec
+void Cmd_fgpri(char *tr[], char *cmd) {
+    if (tr[1] == NULL || tr[2] == NULL) {
+        fprintf(stderr, "Usage: fgpri prio progspec\n");
+        return;
+    }
+
+    int prio = atoi(tr[1]);
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
+            perror("setpriority");
+            exit(EXIT_FAILURE);
+        }
+        execvp(tr[2], &tr[2]);
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        waitpid(pid, NULL, 0);
+    } else {
+        perror("fork");
+    }
+}
+
+void addJob(pid_t pid, const char *cmd, const char *args) {
+    if (jobCount < MAX_JOBS) {
+        jobs[jobCount].pid = pid;
+        strncpy(jobs[jobCount].cmd, cmd, 255);
+        jobs[jobCount].cmd[255] = '\0';
+        strncpy(jobs[jobCount].args, args, 255);
+        jobs[jobCount].args[255] = '\0';
+        jobs[jobCount].startTime = time(NULL);
+        jobCount++;
+    } else {
+        fprintf(stderr, "Job list is full\n");
+    }
+}
+
+void removeJob(pid_t pid) {
+    for (int i = 0; i < jobCount; i++) {
+        if (jobs[i].pid == pid) {
+            for (int j = i; j < jobCount - 1; j++) {
+                jobs[j] = jobs[j + 1];
+            }
+            jobCount--;
+            return;
+        }
+    }
 }
 
 //progspec
-void Cmd_fg(){
+void Cmd_back(char *tr[], char *cmd) {
+    if (tr[1] == NULL) {
+        fprintf(stderr, "Usage: back progspec\n");
+        return;
+    }
 
+    pid_t pid = fork();
+    if (pid == 0) {
+        execvp(tr[1], &tr[1]);
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        char args[256] = "";
+        for (int i = 1; tr[i] != NULL; i++) {
+            strncat(args, tr[i], sizeof(args) - strlen(args) - 1);
+            if (tr[i + 1] != NULL) {
+                strncat(args, " ", sizeof(args) - strlen(args) - 1);
+            }
+        }
+        addJob(pid, tr[1], args);
+        printf("Process %d running in background\n", pid);
+    } else {
+        perror("fork");
+    }
 }
+
 
 //prio progspec
-void Cmd_fgpri(){
+void Cmd_backpri(char *tr[], char *cmd) {
+    if (tr[1] == NULL || tr[2] == NULL) {
+        fprintf(stderr, "Usage: backpri prio progspec\n");
+        return;
+    }
 
+    int prio = atoi(tr[1]);
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
+            perror("setpriority");
+            exit(EXIT_FAILURE);
+        }
+        execvp(tr[2], &tr[2]);
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        char args[256] = "";
+        for (int i = 2; tr[i] != NULL; i++) {
+            strncat(args, tr[i], sizeof(args) - strlen(args) - 1);
+            if (tr[i + 1] != NULL) {
+                strncat(args, " ", sizeof(args) - strlen(args) - 1);
+            }
+        }
+        addJob(pid, tr[2], args);
+        printf("Process %d running in background\n", pid);
+    } else {
+        perror("fork");
+    }
 }
 
-//progspec
-void Cmd_back(){
+void Cmd_listjobs(char *tr[], char *cmd) {
+    for (int i = 0; i < jobCount; i++) {
+        struct passwd *pw = getpwuid(getuid());
+        char *username = pw ? pw->pw_name : "unknown";
 
-}
+        struct rusage usage;
+        getrusage(RUSAGE_CHILDREN, &usage);
+        int priority = getpriority(PRIO_PROCESS, jobs[i].pid);
 
-//prio progspec
-void Cmd_backpri(){
+        char startTimeStr[20];
+        struct tm *startTimeInfo = localtime(&jobs[i].startTime);
+        strftime(startTimeStr, sizeof(startTimeStr), "%Y/%m/%d %H:%M:%S", startTimeInfo);
 
-}
-
-void Cmd_listjobs(){
-
+        printf("%-10d %-8s p=%-2d %s ACTIVO (000) %s %s\n",
+               jobs[i].pid, username, priority, startTimeStr, jobs[i].cmd, jobs[i].args);
+    }
 }
 
 //[-term|-sig] 
-void Cmd_deljobs(){
+void Cmd_deljobs(char *tr[], char *cmd) {
+    if (tr[1] == NULL || (strcmp(tr[1], "-term") != 0 && strcmp(tr[1], "-sig") != 0)) {
+        fprintf(stderr, "Usage: deljobs [-term|-sig]\n");
+        return;
+    }
 
+    for (int i = 0; i < jobCount; i++) {
+        if (strcmp(tr[1], "-term") == 0) {
+            kill(jobs[i].pid, SIGTERM);
+        } else if (strcmp(tr[1], "-sig") == 0) {
+            kill(jobs[i].pid, SIGKILL);
+        }
+        removeJob(jobs[i].pid);
+        i--; // Adjust index after removal
+    }
 }
 
 
@@ -2562,6 +2988,10 @@ void Cmd_quit(bool *terminado, char *tr[], tListP *openFilesList){ //Función pa
 
 
 void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesList){ //Función para procesar la entrada
+    int argc = 0;
+    while(tr[argc] != NULL){ //Mientras el argumento no sea nulo
+        argc++; //Aumenta el contador de argumentos
+    }
     if(tr[0] != NULL){
         if(strcmp(tr[0], "authors") == 0){
         Cmd_authors(tr,cmd);
@@ -2630,33 +3060,33 @@ void procesarEntrada(char *cmd, bool *terminado, char *tr[], tListP *openFilesLi
         }else if(strcmp(tr[0], "setuid") == 0){
                 Cmd_setuid(tr, cmd);
         }else if(strcmp(tr[0], "showvar") == 0){
-                Cmd_showvar();
+                Cmd_showvar(argc,tr,environ);
         }else if(strcmp(tr[0], "changevar") == 0){
-                Cmd_changevar();
+                Cmd_changevar(argc,tr,environ);
         }else if(strcmp(tr[0], "subsvar") == 0){
-                Cmd_subsvar();
+                Cmd_subsvar(argc,tr,environ);
         }else if(strcmp(tr[0], "environ") == 0){
-                Cmd_environ();
+                Cmd_environ(argc,tr,environ);
         }else if(strcmp(tr[0], "fork") == 0){   
                 Cmd_fork(tr);
         }else if(strcmp(tr[0], "search") == 0){
-                Cmd_search();
+                Cmd_search(tr,cmd);
         }else if(strcmp(tr[0], "exec") == 0){
-                Cmd_exec();
+                Cmd_exec(tr,cmd);
         }else if(strcmp(tr[0], "execpri") == 0){
-                Cmd_execpri();
+                Cmd_execpri(tr,cmd);
         }else if(strcmp(tr[0], "fg") == 0){
-                Cmd_fg();
+                Cmd_fg(tr,cmd);
         }else if(strcmp(tr[0], "fgpri") == 0){
-                Cmd_fgpri();
+                Cmd_fgpri(tr,cmd);
         }else if(strcmp(tr[0], "back") == 0){
-                Cmd_back();
+                Cmd_back(tr,cmd);
         }else if(strcmp(tr[0], "backpri") == 0){
-                Cmd_backpri();
+                Cmd_backpri(tr,cmd);
         }else if(strcmp(tr[0], "listjobs") == 0){
-                Cmd_listjobs();
+                Cmd_listjobs(tr,cmd);
         }else if(strcmp(tr[0], "deljobs") == 0){
-                Cmd_deljobs();
+                Cmd_deljobs(tr,cmd);
         }else{ 
             fprintf(stderr,"%s \n",cmd); 
         }
