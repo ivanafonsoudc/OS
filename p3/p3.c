@@ -31,6 +31,7 @@
 #include <ctype.h>
 #include <sys/resource.h>
 #include <signal.h>
+#include <errno.h>  
 #include "list.h"
 
 #define TAMANO 2048
@@ -49,6 +50,7 @@ typedef struct {
     char cmd[256];
     char args[256];
     time_t startTime;
+    int status; // 0: running, 1: terminated, 2 signaled
 } Job;
 
 static Job jobs[MAX_JOBS];
@@ -2486,17 +2488,43 @@ void Cmd_environ(int argc, char *tr[],char **environ){
 }
 
 
-void Cmd_fork (char *tr[]){
+/*void Cmd_fork (char *tr[]){
 	pid_t pid;
 	
 	if ((pid=fork())==0){
-/*		VaciarListaProcesos(&LP); Depende de la implementaciÃ³n de cada uno*/
+		//VaciarListaProcesos(&LP); Depende de la implementaciÃ³n de cada uno
 		printf ("ejecutando proceso %d\n", getpid());
 	}
 	else if (pid!=-1)
 		waitpid (pid,NULL,0);
-}
+}*/
 
+void Cmd_fork(char *tr[]) {
+    pid_t pid;
+
+    if ((pid = fork()) == 0) {
+        // Proceso hijo
+        printf("Ejecutando proceso hijo con PID %d\n", getpid());
+        if (tr[1] != NULL) {
+            execvp(tr[1], &tr[1]);
+            perror("execvp");
+            exit(EXIT_FAILURE);
+        } else {
+            printf("No se proporcionó ningún comando para ejecutar.\n");
+            exit(EXIT_FAILURE);
+        }
+    } else if (pid > 0) {
+        // Proceso padre
+        printf("Proceso padre con PID %d, esperando a que el hijo termine...\n", getpid());
+        if (waitpid(pid, NULL, 0) == -1) {
+            perror("waitpid");
+        }
+        printf("Proceso hijo con PID %d ha terminado.\n", pid);
+    } else {
+        // Error al crear el proceso hijo
+        perror("fork");
+    }
+}
 
 int addSearchDir(const char *dir) {
     if (searchDirCount >= MAX_SEARCH_DIRS) {
@@ -2620,7 +2648,6 @@ void Cmd_exec(char *tr[], char *cmd){
         fprintf(stderr, "Usage: exec progspec\n");
         return;
     }
-
     execvp(tr[1], &tr[1]);
     perror("execvp");
 }
@@ -2631,40 +2658,92 @@ void Cmd_execpri(char *tr[], char *cmd) {
         fprintf(stderr, "Usage: execpri prio progspec\n");
         return;
     }
-
     int prio = atoi(tr[1]);
     if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
         perror("setpriority");
         return;
     }
-
     execvp(tr[2], &tr[2]);
     perror("execvp");
 }
 
+void addJob(pid_t pid, const char *cmd, const char *args) {
+    if (jobCount < MAX_JOBS) {
+        jobs[jobCount].pid = pid;
+        strncpy(jobs[jobCount].cmd, cmd, 255);
+        jobs[jobCount].cmd[255] = '\0';
+        strncpy(jobs[jobCount].args, args, 255);
+        jobs[jobCount].args[255] = '\0';
+        jobs[jobCount].startTime = time(NULL);
+        jobs[jobCount].status = 0; // running
+        jobCount++;
+    } else {
+        fprintf(stderr, "Job list is full\n");
+    }
+}
+
+void removeJob(pid_t pid) {
+    for (int i = 0; i < jobCount; i++) {
+        if (jobs[i].pid == pid) {
+            for (int j = i; j < jobCount - 1; j++) {
+                jobs[j] = jobs[j + 1];
+            }
+            jobCount--;
+            return;
+        }
+    }
+}
+
+void updateJobStatus() {
+    for (int i = 0; i < jobCount; i++) {
+        int status;
+        pid_t result = waitpid(jobs[i].pid, &status, WNOHANG);
+        if (result == 0) {
+            // still running
+            jobs[i].status = 0;
+        } else if (result > 0) {
+            if (WIFEXITED(status)) {
+                jobs[i].status = 1; // terminated normally
+            } else if (WIFSIGNALED(status)) {
+                jobs[i].status = 2; // terminated by signal
+            }
+        } else {
+            if (errno == ECHILD) {
+                // No such process, assume it has terminated
+                jobs[i].status = 1;
+            } else {
+                perror("waitpid");
+            }
+        }
+    }
+}
 
 //progspec
-void Cmd_fg(char *tr[], char *cmd) {
+void Cmd_back(char *tr[], char *cmd) {
     if (tr[1] == NULL) {
-        fprintf(stderr, "Usage: fg progspec\n");
+        fprintf(stderr, "Usage: back progspec\n");
         return;
     }
 
     pid_t pid = fork();
     if (pid == 0) {
+        // Proceso hijo
         execvp(tr[1], &tr[1]);
         perror("execvp");
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
+        // Proceso padre
         waitpid(pid, NULL, 0);
     } else {
+        // Error al crear el proceso hijo
         perror("fork");
     }
+
 }
 
 //prio progspec
-void Cmd_fgpri(char *tr[], char *cmd) {
-    if (tr[1] == NULL || tr[2] == NULL) {
+void Cmd_backpri(char *tr[], char *cmd) {
+  if (tr[1] == NULL || tr[2] == NULL) {
         fprintf(stderr, "Usage: fgpri prio progspec\n");
         return;
     }
@@ -2684,47 +2763,30 @@ void Cmd_fgpri(char *tr[], char *cmd) {
     } else {
         perror("fork");
     }
-}
 
-void addJob(pid_t pid, const char *cmd, const char *args) {
-    if (jobCount < MAX_JOBS) {
-        jobs[jobCount].pid = pid;
-        strncpy(jobs[jobCount].cmd, cmd, 255);
-        jobs[jobCount].cmd[255] = '\0';
-        strncpy(jobs[jobCount].args, args, 255);
-        jobs[jobCount].args[255] = '\0';
-        jobs[jobCount].startTime = time(NULL);
-        jobCount++;
-    } else {
-        fprintf(stderr, "Job list is full\n");
-    }
-}
-
-void removeJob(pid_t pid) {
-    for (int i = 0; i < jobCount; i++) {
-        if (jobs[i].pid == pid) {
-            for (int j = i; j < jobCount - 1; j++) {
-                jobs[j] = jobs[j + 1];
-            }
-            jobCount--;
-            return;
-        }
-    }
+     if (tr[1] == NULL || tr[2] == NULL) {
+        fprintf(stderr, "Usage: backpri prio progspec\n");
+        return;
+    } 
 }
 
 //progspec
-void Cmd_back(char *tr[], char *cmd) {
+void Cmd_fg(char *tr[], char *cmd) {
+    
     if (tr[1] == NULL) {
-        fprintf(stderr, "Usage: back progspec\n");
+        fprintf(stderr, "Usage: fg progspec\n");
         return;
     }
 
     pid_t pid = fork();
     if (pid == 0) {
+        // Proceso hijo
+        setsid(); // Desasociar el proceso hijo del terminal
         execvp(tr[1], &tr[1]);
         perror("execvp");
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
+        // Proceso padre
         char args[256] = "";
         for (int i = 1; tr[i] != NULL; i++) {
             strncat(args, tr[i], sizeof(args) - strlen(args) - 1);
@@ -2733,23 +2795,20 @@ void Cmd_back(char *tr[], char *cmd) {
             }
         }
         addJob(pid, tr[1], args);
-        printf("Process %d running in background\n", pid);
     } else {
+        // Error al crear el proceso hijo
         perror("fork");
     }
 }
 
-
 //prio progspec
-void Cmd_backpri(char *tr[], char *cmd) {
-    if (tr[1] == NULL || tr[2] == NULL) {
-        fprintf(stderr, "Usage: backpri prio progspec\n");
-        return;
-    }
+void Cmd_fgpri(char *tr[], char *cmd) {
+    
 
     int prio = atoi(tr[1]);
     pid_t pid = fork();
     if (pid == 0) {
+        setsid(); // Desasociar el proceso hijo del terminal
         if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
             perror("setpriority");
             exit(EXIT_FAILURE);
@@ -2773,24 +2832,33 @@ void Cmd_backpri(char *tr[], char *cmd) {
 }
 
 void Cmd_listjobs(char *tr[], char *cmd) {
+    printf("Ejecutando Cmd_listjobs\n");
+    updateJobStatus();
+    printf("Número de trabajos: %d\n", jobCount);
     for (int i = 0; i < jobCount; i++) {
         struct passwd *pw = getpwuid(getuid());
         char *username = pw ? pw->pw_name : "unknown";
 
-        struct rusage usage;
-        getrusage(RUSAGE_CHILDREN, &usage);
         int priority = getpriority(PRIO_PROCESS, jobs[i].pid);
 
         char startTimeStr[20];
         struct tm *startTimeInfo = localtime(&jobs[i].startTime);
         strftime(startTimeStr, sizeof(startTimeStr), "%Y/%m/%d %H:%M:%S", startTimeInfo);
 
-        printf("%-10d %-8s p=%-2d %s ACTIVO (000) %s %s\n",
-               jobs[i].pid, username, priority, startTimeStr, jobs[i].cmd, jobs[i].args);
+        const char *statusStr;
+        if (jobs[i].status == 0) {
+            statusStr = "ACTIVO";
+        } else if (jobs[i].status == 1) {
+            statusStr = "TERMINADO";
+        } else {
+            statusStr = "SIGNALADO";
+        }
+
+        printf("%-10d %-8s p=%-2d %s %s (000) %s %s\n",
+               jobs[i].pid, username, priority, startTimeStr, statusStr, jobs[i].cmd, jobs[i].args);
     }
 }
 
-//[-term|-sig] 
 void Cmd_deljobs(char *tr[], char *cmd) {
     if (tr[1] == NULL || (strcmp(tr[1], "-term") != 0 && strcmp(tr[1], "-sig") != 0)) {
         fprintf(stderr, "Usage: deljobs [-term|-sig]\n");
@@ -2798,13 +2866,11 @@ void Cmd_deljobs(char *tr[], char *cmd) {
     }
 
     for (int i = 0; i < jobCount; i++) {
-        if (strcmp(tr[1], "-term") == 0) {
-            kill(jobs[i].pid, SIGTERM);
-        } else if (strcmp(tr[1], "-sig") == 0) {
-            kill(jobs[i].pid, SIGKILL);
+        if ((strcmp(tr[1], "-term") == 0 && jobs[i].status == 1) ||
+            (strcmp(tr[1], "-sig") == 0 && jobs[i].status == 2)) {
+            removeJob(jobs[i].pid);
+            i--; // Adjust index after removal
         }
-        removeJob(jobs[i].pid);
-        i--; // Adjust index after removal
     }
 }
 
