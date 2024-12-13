@@ -2876,7 +2876,7 @@ void Cmd_listjobs(char *tr[], char *cmd) {
         } else if (jobs[i].status == 1) {
             statusStr = "TERMINADO";
         } else {
-            statusStr = "SIGNALADO";
+            statusStr = "SIGNALED";
         }
 
         printf("%-10d %-8s p=%-2d %s %s (000) %s %s\n",
