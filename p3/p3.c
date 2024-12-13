@@ -51,6 +51,7 @@ typedef struct {
     char args[256];
     time_t startTime;
     int status; // 0: running, 1: terminated, 2 signaled
+    int priority;
 } Job;
 
 static Job jobs[MAX_JOBS];
@@ -2677,6 +2678,7 @@ void addJob(pid_t pid, const char *cmd, const char *args) {
         jobs[jobCount].startTime = time(NULL);
         jobs[jobCount].status = 0; // running
         jobCount++;
+        printf("Job added: PID=%d, CMD=%s, ARGS=%s\n", pid, cmd, args); // Mensaje de depuración
     } else {
         fprintf(stderr, "Job list is full\n");
     }
@@ -2694,23 +2696,33 @@ void removeJob(pid_t pid) {
     }
 }
 
+
 void updateJobStatus() {
     for (int i = 0; i < jobCount; i++) {
+        if (jobs[i].status != 0) { // Si ya está marcado como TERMINADO o SIGNALADO
+            continue;
+        }
+
         int status;
         pid_t result = waitpid(jobs[i].pid, &status, WNOHANG);
+
         if (result == 0) {
-            // still running
-            jobs[i].status = 0;
+            // Proceso sigue en ejecución
+            jobs[i].status = 0; // ACTIVO
         } else if (result > 0) {
+            // Proceso terminado
             if (WIFEXITED(status)) {
-                jobs[i].status = 1; // terminated normally
+                jobs[i].status = 1; // TERMINADO
+                printf("Proceso %d terminado normalmente con código %d\n", jobs[i].pid, WEXITSTATUS(status));
             } else if (WIFSIGNALED(status)) {
-                jobs[i].status = 2; // terminated by signal
+                jobs[i].status = 2; // SIGNALADO
+                printf("Proceso %d terminado por señal %d\n", jobs[i].pid, WTERMSIG(status));
             }
-        } else {
+        } else if (result == -1) {
+            // Error en waitpid
             if (errno == ECHILD) {
-                // No such process, assume it has terminated
-                jobs[i].status = 1;
+                jobs[i].status = 1; // TERMINADO
+                printf("Proceso %d ya no existe (ECHILD).\n", jobs[i].pid);
             } else {
                 perror("waitpid");
             }
@@ -2718,7 +2730,7 @@ void updateJobStatus() {
     }
 }
 
-//progspec
+
 void Cmd_back(char *tr[], char *cmd) {
     if (tr[1] == NULL) {
         fprintf(stderr, "Usage: back progspec\n");
@@ -2727,66 +2739,18 @@ void Cmd_back(char *tr[], char *cmd) {
 
     pid_t pid = fork();
     if (pid == 0) {
-        // Proceso hijo
-        execvp(tr[1], &tr[1]);
-        perror("execvp");
-        exit(EXIT_FAILURE);
-    } else if (pid > 0) {
-        // Proceso padre
-        waitpid(pid, NULL, 0);
-    } else {
-        // Error al crear el proceso hijo
-        perror("fork");
-    }
-
-}
-
-//prio progspec
-void Cmd_backpri(char *tr[], char *cmd) {
-  if (tr[1] == NULL || tr[2] == NULL) {
-        fprintf(stderr, "Usage: fgpri prio progspec\n");
-        return;
-    }
-
-    int prio = atoi(tr[1]);
-    pid_t pid = fork();
-    if (pid == 0) {
-        if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
+        // Proceso hijo: Ejecuta el programa
+        printf("Ejecutando %s en background...\n", tr[1]);
+        setsid(); // Desasociar el proceso hijo del terminal
+        if (setpriority(PRIO_PROCESS, getpid(), 1) == -1) {
             perror("setpriority");
             exit(EXIT_FAILURE);
         }
-        execvp(tr[2], &tr[2]);
-        perror("execvp");
-        exit(EXIT_FAILURE);
-    } else if (pid > 0) {
-        waitpid(pid, NULL, 0);
-    } else {
-        perror("fork");
-    }
-
-     if (tr[1] == NULL || tr[2] == NULL) {
-        fprintf(stderr, "Usage: backpri prio progspec\n");
-        return;
-    } 
-}
-
-//progspec
-void Cmd_fg(char *tr[], char *cmd) {
-    
-    if (tr[1] == NULL) {
-        fprintf(stderr, "Usage: fg progspec\n");
-        return;
-    }
-
-    pid_t pid = fork();
-    if (pid == 0) {
-        // Proceso hijo
-        setsid(); // Desasociar el proceso hijo del terminal
         execvp(tr[1], &tr[1]);
-        perror("execvp");
+        perror("Error en execvp"); // Si llega aquí, execvp falló
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
-        // Proceso padre
+        // Proceso padre: Registrar el trabajo
         char args[256] = "";
         for (int i = 1; tr[i] != NULL; i++) {
             strncat(args, tr[i], sizeof(args) - strlen(args) - 1);
@@ -2795,28 +2759,37 @@ void Cmd_fg(char *tr[], char *cmd) {
             }
         }
         addJob(pid, tr[1], args);
+        printf("Process %d running in background\n", pid);
     } else {
         // Error al crear el proceso hijo
         perror("fork");
     }
 }
 
+
+
 //prio progspec
-void Cmd_fgpri(char *tr[], char *cmd) {
-    
+void Cmd_backpri(char *tr[], char *cmd) {
+    if (tr[1] == NULL || tr[2] == NULL) {
+        fprintf(stderr, "Usage: backpri prio progspec\n");
+        return;
+    }
 
     int prio = atoi(tr[1]);
     pid_t pid = fork();
     if (pid == 0) {
+        // Proceso hijo: Ejecuta el programa con prioridad
+        printf("Ejecutando %s en background con prioridad %d...\n", tr[2], prio);
         setsid(); // Desasociar el proceso hijo del terminal
         if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
             perror("setpriority");
             exit(EXIT_FAILURE);
         }
         execvp(tr[2], &tr[2]);
-        perror("execvp");
+        perror("Error en execvp"); // Si llega aquí, execvp falló
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
+        // Proceso padre: Registrar el trabajo
         char args[256] = "";
         for (int i = 2; tr[i] != NULL; i++) {
             strncat(args, tr[i], sizeof(args) - strlen(args) - 1);
@@ -2825,8 +2798,60 @@ void Cmd_fgpri(char *tr[], char *cmd) {
             }
         }
         addJob(pid, tr[2], args);
-        printf("Process %d running in background\n", pid);
+        printf("Process %d running in background with priority %d\n", pid, prio);
     } else {
+        // Error al crear el proceso hijo
+        perror("fork");
+    }
+}
+
+
+//progspec
+void Cmd_fg(char *tr[], char *cmd) {
+    if (tr[1] == NULL) {
+        fprintf(stderr, "Usage: fg progspec\n");
+        return;
+    }
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Proceso hijo: Ejecuta el programa
+        printf("Ejecutando %s en foreground...\n", tr[1]);
+        execvp(tr[1], &tr[1]);
+        perror("Error en execvp"); // Si llega aquí, execvp falló
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        // Proceso padre: Esperar a que el hijo termine
+        waitpid(pid, NULL, 0);
+    } else {
+        // Error al crear el proceso hijo
+        perror("fork");
+    }
+}
+
+void Cmd_fgpri(char *tr[], char *cmd) {
+    if (tr[1] == NULL || tr[2] == NULL) {
+        fprintf(stderr, "Usage: fgpri prio progspec\n");
+        return;
+    }
+
+    int prio = atoi(tr[1]);
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Proceso hijo: Ejecuta el programa con prioridad
+        printf("Ejecutando %s en foreground con prioridad %d...\n", tr[2], prio);
+        if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
+            perror("setpriority");
+            exit(EXIT_FAILURE);
+        }
+        execvp(tr[2], &tr[2]);
+        perror("Error en execvp"); // Si llega aquí, execvp falló
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        // Proceso padre: Esperar a que el hijo termine
+        waitpid(pid, NULL, 0);
+    } else {
+        // Error al crear el proceso hijo
         perror("fork");
     }
 }
