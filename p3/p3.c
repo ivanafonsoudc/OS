@@ -2303,15 +2303,14 @@ int modificar_environ(char *var, char *valor, char **environ){
 int modificar_arg2(char *var1, char *var2, char *valor, char **environ) {
     for (int i = 0; environ[i] != NULL; i++) {
         if (strncmp(environ[i], var1, strlen(var1)) == 0 && environ[i][strlen(var1)] == '=') {
-            // Eliminar la variable antigua
-            unsetenv(var1);
-            // Crear la nueva variable en el mismo lugar
+            // Crear la nueva variable
             char *nueva_var = malloc(strlen(var2) + strlen(valor) + 2); // +2 para '=' y '\0'
             if (nueva_var == NULL) {
-                perror("No se pudo asignar memoria\n");
+                perror("No se pudo asignar memoria");
                 return 0;
             }
             snprintf(nueva_var, strlen(var2) + strlen(valor) + 2, "%s=%s", var2, valor);
+            // Actualizar la variable en el entorno
             environ[i] = nueva_var;
             return 1;
         }
@@ -2350,9 +2349,11 @@ int modificar_putenv(char *var,char *valor){
 void Cmd_getuid(){
     uid_t real_uid = getuid();
     uid_t effective_uid = geteuid();
+     char *user = getenv("USER");
+    
 
-    printf("Real uid: %d\n", real_uid);
-    printf("Effective uid: %d\n", effective_uid);
+    printf("Real uid: %d (%s)\n", real_uid, user);
+    printf("Effective uid: %d (%s)\n", effective_uid, user);
 }
 
 //[-l] id 
@@ -2360,7 +2361,7 @@ void Cmd_setuid(char *tr[], char *cmd){
     uid_t uid;
     struct passwd *pwd;
     int login = 0;
-    if(tr[1] == NULL && strcmp (tr[1], "-l") == 0){
+    if(tr[1] != NULL && strcmp (tr[1], "-l") == 0){
         login = 1;
         tr++;
     }
@@ -2377,14 +2378,10 @@ void Cmd_setuid(char *tr[], char *cmd){
     if(login){
         if(setreuid(uid,uid) == -1){
             perror("setreuid");
-        }else{
-            printf("UID real y efectivo cambiados a %d\n", uid);
         }
     }else{
         if(setuid(uid) == -1){
             perror("setuid");
-        }else{
-            printf("UID efectivo cambiado a %d\n", uid);
         }
     }
 
@@ -2489,7 +2486,7 @@ void Cmd_environ(int argc, char *tr[],char **environ){
 }
 
 
-/*void Cmd_fork (char *tr[]){
+void Cmd_fork (char *tr[]){
 	pid_t pid;
 	
 	if ((pid=fork())==0){
@@ -2498,34 +2495,8 @@ void Cmd_environ(int argc, char *tr[],char **environ){
 	}
 	else if (pid!=-1)
 		waitpid (pid,NULL,0);
-}*/
-
-void Cmd_fork(char *tr[]) {
-    pid_t pid;
-
-    if ((pid = fork()) == 0) {
-        // Proceso hijo
-        printf("Ejecutando proceso hijo con PID %d\n", getpid());
-        if (tr[1] != NULL) {
-            execvp(tr[1], &tr[1]);
-            perror("execvp");
-            exit(EXIT_FAILURE);
-        } else {
-            printf("No se proporcionó ningún comando para ejecutar.\n");
-            exit(EXIT_FAILURE);
-        }
-    } else if (pid > 0) {
-        // Proceso padre
-        printf("Proceso padre con PID %d, esperando a que el hijo termine...\n", getpid());
-        if (waitpid(pid, NULL, 0) == -1) {
-            perror("waitpid");
-        }
-        printf("Proceso hijo con PID %d ha terminado.\n", pid);
-    } else {
-        // Error al crear el proceso hijo
-        perror("fork");
-    }
 }
+
 
 int addSearchDir(const char *dir) {
     if (searchDirCount >= MAX_SEARCH_DIRS) {
@@ -2653,21 +2624,60 @@ void Cmd_exec(char *tr[], char *cmd){
     perror("execvp");
 }
 
-//prio progspec
 void Cmd_execpri(char *tr[], char *cmd) {
     if (tr[1] == NULL || tr[2] == NULL) {
-        fprintf(stderr, "Usage: execpri prio progspec\n");
+        fprintf(stderr, "Usage: execpri prio [VAR1 VAR2 ...] executablefile [arg1 arg2 ...]\n");
         return;
     }
+
     int prio = atoi(tr[1]);
+    char *env_vars[256] = {NULL};
+    char *exec_cmd[256];
+    int env_count = 0, cmd_count = 0;
+
+    for (int i = 2; tr[i] != NULL; i++) {
+        if (getenv(tr[i]) != NULL) {
+            env_vars[env_count++] = tr[i];
+        } else {
+            exec_cmd[cmd_count++] = tr[i];
+        }
+    }
+    exec_cmd[cmd_count] = NULL;
+
     if (setpriority(PRIO_PROCESS, getpid(), prio) == -1) {
         perror("setpriority");
         return;
     }
-    execvp(tr[2], &tr[2]);
+
+    if (env_vars[0] != NULL) {
+        char *new_env[256];
+        int new_env_count = 0;
+
+        for (int i = 0; env_vars[i] != NULL; i++) {
+            char *value = getenv(env_vars[i]);
+            if (value != NULL) {
+                new_env[new_env_count] = malloc(strlen(env_vars[i]) + strlen(value) + 2);
+                if (new_env[new_env_count] == NULL) {
+                    perror("malloc");
+                    return;
+                }
+                sprintf(new_env[new_env_count], "%s=%s", env_vars[i], value);
+                new_env_count++;
+            }
+        }
+        new_env[new_env_count] = NULL;
+
+        execve(exec_cmd[0], exec_cmd, new_env);
+
+        // Free allocated memory
+        for (int i = 0; i < new_env_count; i++) {
+            free(new_env[i]);
+        }
+    } else {
+        execvp(exec_cmd[0], exec_cmd);
+    }
     perror("execvp");
 }
-
 void addJob(pid_t pid, const char *cmd, const char *args) {
     if (jobCount < MAX_JOBS) {
         jobs[jobCount].pid = pid;
@@ -2699,24 +2709,55 @@ void removeJob(pid_t pid) {
 
 void updateJobStatus() {
     for (int i = 0; i < jobCount; i++) {
-        if (jobs[i].status != 0) { // Si ya está marcado como TERMINADO o SIGNALADO
+        // Si el proceso ya está marcado como TERMINADO o SIGNALADO, no lo revisamos más
+        if (jobs[i].status == 1 || jobs[i].status == 2) {
             continue;
         }
 
+        // Si ya está en STOPPED, verificamos si hay cambios pero no lo sobrescribimos si sigue igual
+        if (jobs[i].status == 3) {
+            int status;
+            pid_t result = waitpid(jobs[i].pid, &status, WNOHANG | WUNTRACED);
+            if (result == 0) {
+                continue; // No hay cambios, mantener STOPPED
+            } else if (result > 0) {
+                if (WIFEXITED(status)) {
+                    jobs[i].status = 1; // TERMINADO
+                    printf("Proceso %d terminado normalmente con código %d\n", jobs[i].pid, WEXITSTATUS(status));
+                } else if (WIFSIGNALED(status)) {
+                    jobs[i].status = 2; // SIGNALADO
+                    printf("Proceso %d terminado por señal %d\n", jobs[i].pid, WTERMSIG(status));
+                } else if (WIFSTOPPED(status)) {
+                    jobs[i].status = 3; // Sigue detenido
+                }
+            } else if (result == -1) {
+                if (errno == ECHILD) {
+                    jobs[i].status = 1; // TERMINADO
+                    printf("Proceso %d ya no existe (ECHILD).\n", jobs[i].pid);
+                } else {
+                    perror("waitpid");
+                }
+            }
+            continue;
+        }
+
+        // Verificar estado de procesos que están ACTIVO o no marcado
         int status;
-        pid_t result = waitpid(jobs[i].pid, &status, WNOHANG);
+        pid_t result = waitpid(jobs[i].pid, &status, WNOHANG | WUNTRACED);
 
         if (result == 0) {
             // Proceso sigue en ejecución
             jobs[i].status = 0; // ACTIVO
         } else if (result > 0) {
-            // Proceso terminado
             if (WIFEXITED(status)) {
                 jobs[i].status = 1; // TERMINADO
                 printf("Proceso %d terminado normalmente con código %d\n", jobs[i].pid, WEXITSTATUS(status));
             } else if (WIFSIGNALED(status)) {
                 jobs[i].status = 2; // SIGNALADO
                 printf("Proceso %d terminado por señal %d\n", jobs[i].pid, WTERMSIG(status));
+            } else if (WIFSTOPPED(status)) {
+                jobs[i].status = 3; // STOPPED
+                printf("Proceso %d detenido por señal %d\n", jobs[i].pid, WSTOPSIG(status));
             }
         } else if (result == -1) {
             // Error en waitpid
@@ -2729,6 +2770,9 @@ void updateJobStatus() {
         }
     }
 }
+
+
+
 
 
 void Cmd_back(char *tr[], char *cmd) {
@@ -2875,8 +2919,10 @@ void Cmd_listjobs(char *tr[], char *cmd) {
             statusStr = "ACTIVO";
         } else if (jobs[i].status == 1) {
             statusStr = "TERMINADO";
-        } else {
+        } else if (jobs[i].status == 2) {
             statusStr = "SIGNALED";
+        } else if (jobs[i].status == 3) {
+            statusStr = "STOPPED";
         }
 
         printf("%-10d %-8s p=%-2d %s %s (000) %s %s\n",
